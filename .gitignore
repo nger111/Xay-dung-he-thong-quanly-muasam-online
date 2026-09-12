@@ -1,0 +1,65 @@
+## ===================================================
+## .gitignore cho dự án .NET MAUI + ASP.NET Core
+## ===================================================
+
+# Build output
+bin/
+obj/
+out/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vscode/
+
+# .NET
+*.dll
+*.exe
+*.pdb
+*.msi
+*.cache
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# NuGet
+packages/
+*.lock.json
+!package-lock.json
+
+# Rider / JetBrains
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+Thumbs.db
+
+# ASP.NET Core - Secrets & Config
+appsettings.Development.json
+appsettings.Production.json
+**/secrets.json
+.env
+.env.*
+
+# Entity Framework Migrations (optional - giữ lại nếu muốn share migrations)
+# **/Migrations/
+
+# MAUI Android
+**/*.apk
+**/*.aab
+**/*.ipa
+
+# Logs
+logs/
+*.log
+Serilog/
+
+# Publish output
+publish/
+**/publish/
