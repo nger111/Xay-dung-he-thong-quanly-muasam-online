@@ -1,65 +1,62 @@
-## ===================================================
-## .gitignore cho dự án .NET MAUI + ASP.NET Core
-## ===================================================
+# ===================================================
+# .gitignore cho dự án Node.js + Flutter
+# ===================================================
 
-# Build output
-bin/
-obj/
-out/
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+.pnp
+.pnp.js
 
-# Visual Studio
-.vs/
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-*.vscode/
+# Env
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# .NET
-*.dll
-*.exe
-*.pdb
-*.msi
-*.cache
-*.nupkg
-*.snupkg
-project.lock.json
-project.fragment.lock.json
-artifacts/
+# Backend uploads
+backend/uploads/
 
-# NuGet
-packages/
-*.lock.json
-!package-lock.json
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+flutter_*.png
 
-# Rider / JetBrains
-.idea/
-*.iml
+# Android
+**/android/local.properties
+**/android/key.properties
+**/android/app/src/main/res/values/secrets.xml
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# iOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+*.ipa
 
 # macOS
 .DS_Store
-Thumbs.db
 
-# ASP.NET Core - Secrets & Config
-appsettings.Development.json
-appsettings.Production.json
-**/secrets.json
-.env
-.env.*
-
-# Entity Framework Migrations (optional - giữ lại nếu muốn share migrations)
-# **/Migrations/
-
-# MAUI Android
-**/*.apk
-**/*.aab
-**/*.ipa
-
-# Logs
-logs/
-*.log
-Serilog/
-
-# Publish output
-publish/
-**/publish/
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*.iml
