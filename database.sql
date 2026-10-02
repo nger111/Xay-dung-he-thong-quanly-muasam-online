@@ -516,11 +516,11 @@ SELECT
     DATE(created_at)         AS sale_date,
     COUNT(*)                 AS total_orders,
     SUM(total_amount)        AS total_revenue,
-    SUM(
+    SUM((
         SELECT SUM(quantity)
         FROM sales_order_details sod
         WHERE sod.order_id = so.id
-    )                        AS total_items_sold
+    ))                        AS total_items_sold
 FROM sales_orders so
 WHERE status = 'COMPLETED'
 GROUP BY DATE(created_at)
