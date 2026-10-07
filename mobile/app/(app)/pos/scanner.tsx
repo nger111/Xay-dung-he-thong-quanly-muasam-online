@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { CameraView, Camera, BarcodeScanningResult } from 'expo-camera';
+import { CameraView, BarcodeScanningResult, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { productsAPI } from '../../../services/api';
@@ -8,16 +8,10 @@ import { useCartStore } from '../../../store/cartStore';
 import { Product } from '../../../store/cartStore';
 
 export default function ScannerScreen() {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
   const { addItem } = useCartStore();
-
-  useEffect(() => {
-    Camera.requestCameraPermissionsAsync().then(({ status }) => {
-      setHasPermission(status === 'granted');
-    });
-  }, []);
 
   const handleBarCodeScanned = async ({ data }: BarcodeScanningResult) => {
     if (scanned) return;
@@ -41,14 +35,8 @@ export default function ScannerScreen() {
 
       addItem(product);
       Alert.alert('✅ Đã thêm vào giỏ', product.name, [
-        {
-          text: 'Quét tiếp',
-          onPress: () => setScanned(false),
-        },
-        {
-          text: 'Quay lại',
-          onPress: () => router.back(),
-        },
+        { text: 'Quét tiếp', onPress: () => setScanned(false) },
+        { text: 'Quay lại POS', onPress: () => router.back() },
       ]);
     } catch (error: any) {
       const msg =
@@ -64,22 +52,27 @@ export default function ScannerScreen() {
     }
   };
 
-  if (hasPermission === null) {
+  // Chưa có câu trả lời về permission
+  if (!permission) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#16a34a" />
-        <Text style={styles.infoText}>Đang yêu cầu quyền camera...</Text>
+        <Text style={styles.infoText}>Đang kiểm tra quyền camera...</Text>
       </View>
     );
   }
 
-  if (!hasPermission) {
+  // Chưa được cấp quyền
+  if (!permission.granted) {
     return (
       <View style={styles.center}>
-        <Ionicons name="camera-off" size={64} color="#9ca3af" />
-        <Text style={styles.infoText}>Không có quyền truy cập camera</Text>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backBtnText}>Quay lại</Text>
+        <Ionicons name="videocam-off-outline" size={64} color="#9ca3af" />
+        <Text style={styles.infoText}>Ứng dụng cần quyền camera để quét mã vạch sản phẩm</Text>
+        <TouchableOpacity style={styles.actionBtn} onPress={requestPermission}>
+          <Text style={styles.actionBtnText}>Cấp quyền Camera</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSecondary]} onPress={() => router.back()}>
+          <Text style={styles.actionBtnText}>Quay lại</Text>
         </TouchableOpacity>
       </View>
     );
@@ -88,7 +81,7 @@ export default function ScannerScreen() {
   return (
     <View style={styles.container}>
       <CameraView
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         facing="back"
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
         barcodeScannerSettings={{
@@ -96,11 +89,12 @@ export default function ScannerScreen() {
         }}
       />
 
-      {/* Overlay */}
+      {/* Viền quét */}
       <View style={styles.overlay}>
         <View style={styles.scanArea} />
       </View>
 
+      {/* Thông tin phía dưới */}
       <View style={styles.bottomInfo}>
         {loading ? (
           <View style={styles.loadingBox}>
@@ -128,26 +122,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f9fafb',
     gap: 16,
+    padding: 32,
   },
-  infoText: { fontSize: 16, color: '#6b7280', textAlign: 'center', paddingHorizontal: 32 },
-  backBtn: {
+  infoText: { fontSize: 16, color: '#6b7280', textAlign: 'center' },
+  actionBtn: {
     backgroundColor: '#16a34a',
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 10,
+    minWidth: 180,
+    alignItems: 'center',
   },
-  backBtnText: { color: '#ffffff', fontWeight: 'bold' },
+  actionBtnSecondary: { backgroundColor: '#6b7280' },
+  actionBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 15 },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },
   scanArea: {
-    width: 250,
-    height: 250,
+    width: 260,
+    height: 260,
     borderWidth: 2,
     borderColor: '#16a34a',
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: 'transparent',
   },
   bottomInfo: {
@@ -175,10 +177,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
+    textAlign: 'center',
+    marginHorizontal: 32,
   },
   cancelBtn: {
-    backgroundColor: 'rgba(220,38,38,0.8)',
-    paddingHorizontal: 32,
+    backgroundColor: 'rgba(220,38,38,0.85)',
+    paddingHorizontal: 36,
     paddingVertical: 12,
     borderRadius: 24,
   },
