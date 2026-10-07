@@ -1,23 +1,58 @@
-const orderService = require('../services/orderService');
+/**
+ * backend/src/controllers/orderController.js
+ * Controller quản lý Đơn hàng (cả POS lẫn Online từ Mobile)
+ */
 
+const orderService = require('../services/orderService');
+const { success, buildPagination } = require('../utils/response');
+const MESSAGES = require('../constants/messages');
+
+/** GET /api/v1/orders — Danh sách đơn hàng */
 const getAllOrders = async (req, res) => {
   const result = await orderService.getAllOrders(req.query);
-  res.json({ success: true, message: 'OK', data: result });
+  success(res, {
+    message: 'Lấy danh sách đơn hàng thành công',
+    data: { orders: result.orders },
+    pagination: buildPagination(result),
+  });
 };
 
+/** GET /api/v1/orders/:id — Chi tiết đơn hàng */
 const getOrderById = async (req, res) => {
-  const order = await orderService.getOrderById(req.params.id);
-  res.json({ success: true, message: 'OK', data: { order } });
+  const order = await orderService.getOrderById(parseInt(req.params.id));
+  success(res, { message: 'Lấy thông tin đơn hàng thành công', data: { order } });
 };
 
+/** POST /api/v1/orders — Đặt hàng online (Customer từ Mobile) */
 const createOrder = async (req, res) => {
   const order = await orderService.createOrder(req.body, req.user.id);
-  res.status(201).json({ success: true, message: 'Tạo hoá đơn thành công!', data: { order } });
+  success(res, { message: MESSAGES.ORDER_CREATED, data: { order }, statusCode: 201 });
 };
 
+/** POST /api/v1/pos/orders — Bán hàng tại điểm bán POS (Cashier, Manager, Admin) */
+const createPosOrder = async (req, res) => {
+  const order = await orderService.createPosOrder(req.body, req.user.id);
+  success(res, { message: 'Thanh toán thành công! Hóa đơn đã được tạo.', data: { order }, statusCode: 201 });
+};
+
+/** POST /api/v1/pos/scan — Quét mã vạch tại POS (trả thông tin sản phẩm + tồn kho) */
+const scanBarcode = async (req, res) => {
+  const { barcode } = req.body;
+  const product = await orderService.scanBarcode(barcode);
+  success(res, { message: 'Tìm thấy sản phẩm', data: { product } });
+};
+
+/** PATCH /api/v1/orders/:id/cancel — Hủy đơn hàng */
 const cancelOrder = async (req, res) => {
-  const result = await orderService.cancelOrder(req.params.id);
-  res.json({ success: true, message: result.message, data: null });
+  const result = await orderService.cancelOrder(parseInt(req.params.id));
+  success(res, { message: result.message, data: null });
 };
 
-module.exports = { getAllOrders, getOrderById, createOrder, cancelOrder };
+module.exports = {
+  getAllOrders,
+  getOrderById,
+  createOrder,
+  createPosOrder,
+  scanBarcode,
+  cancelOrder,
+};

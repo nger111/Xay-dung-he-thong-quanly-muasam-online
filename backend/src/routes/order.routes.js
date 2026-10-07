@@ -1,59 +1,50 @@
+/**
+ * backend/src/routes/order.routes.js
+ * Routes quản lý Đơn hàng Online (từ Mobile App)
+ * Base: /api/v1/orders
+ *
+ * Phân quyền:
+ *   GET /orders     → Admin, Manager (xem toàn bộ)
+ *   GET /orders/:id → Admin, Manager, hoặc Customer (chỉ đơn của mình)
+ *   POST /orders    → Customer (đặt hàng online từ Mobile)
+ *   PATCH /cancel   → Admin, Manager
+ */
+
 const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/orderController');
 const { authenticate } = require('../middlewares/auth.middleware');
-const { requireAdmin } = require('../middlewares/role.middleware');
-const { validate } = require('../middlewares/validate.middleware');
-const { createOrderSchema } = require('../validators/order.validator');
-
-/**
- * @swagger
- * tags:
- *   name: Orders
- *   description: Quản lý bán hàng và hoá đơn
- */
+const { requireAdmin, requireAdminOrManager, requireAuth } = require('../middlewares/role.middleware');
 
 /**
  * @swagger
  * /orders:
- *   post:
- *     summary: Tạo hoá đơn bán hàng mới
+ *   get:
+ *     summary: Danh sách đơn hàng (Admin, Manager)
  *     tags: [Orders]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [items, cash_received]
- *             properties:
- *               items:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     product_id:
- *                       type: integer
- *                     quantity:
- *                       type: integer
- *                     unit_price:
- *                       type: number
- *               cash_received:
- *                 type: number
- *               payment_method:
- *                 type: string
- *                 enum: [TIEN_MAT, CHUYEN_KHOAN, THE]
- *                 default: TIEN_MAT
- *               note:
- *                 type: string
- *     responses:
- *       201:
- *         description: Tạo hoá đơn thành công (bao gồm tạo hoá đơn, chi tiết hoá đơn, thanh toán và trừ tồn kho bằng transaction)
+ *   post:
+ *     summary: Đặt hàng online (Customer từ Mobile)
+ *     tags: [Orders]
  */
-router.post('/', authenticate, validate(createOrderSchema), orderController.createOrder);
+router.get('/', authenticate, requireAdminOrManager, orderController.getAllOrders);
+router.post('/', authenticate, requireAuth, orderController.createOrder);
 
-router.get('/', authenticate, orderController.getAllOrders);
-router.get('/:id', authenticate, orderController.getOrderById);
-router.delete('/:id', authenticate, requireAdmin, orderController.cancelOrder);
+/**
+ * @swagger
+ * /orders/{id}:
+ *   get:
+ *     summary: Chi tiết đơn hàng
+ *     tags: [Orders]
+ */
+router.get('/:id', authenticate, requireAuth, orderController.getOrderById);
+
+/**
+ * @swagger
+ * /orders/{id}/cancel:
+ *   patch:
+ *     summary: Hủy đơn hàng (Admin, Manager)
+ *     tags: [Orders]
+ */
+router.patch('/:id/cancel', authenticate, requireAdminOrManager, orderController.cancelOrder);
 
 module.exports = router;

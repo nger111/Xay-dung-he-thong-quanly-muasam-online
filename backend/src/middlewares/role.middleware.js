@@ -1,15 +1,75 @@
 /**
- * Middleware kiểm tra quyền Admin (Chủ quán)
+ * backend/src/middlewares/role.middleware.js
+ * Middleware kiểm tra phân quyền theo Role (RBAC)
  * Phải dùng SAU authenticate middleware
+ *
+ * Hệ thống phân quyền:
+ *   ADMIN    — Quản trị viên, toàn quyền
+ *   MANAGER  — Nhân viên quản lý
+ *   CASHIER  — Thu ngân / Nhân viên bán hàng
+ *   CUSTOMER — Khách hàng (Mobile App)
  */
-const requireAdmin = (req, res, next) => {
-  if (!req.user || req.user.role !== 'CHU_QUAN') {
-    return res.status(403).json({
-      success: false,
-      message: 'Chỉ chủ quán mới có quyền thực hiện thao tác này.',
-    });
-  }
-  next();
+
+const ROLES = require('../constants/roles');
+const MESSAGES = require('../constants/messages');
+
+/**
+ * Middleware cho phép một hoặc nhiều Role truy cập endpoint
+ * @param {...string} allowedRoles - Danh sách roles được phép
+ * @returns Middleware function
+ *
+ * @example
+ * // Chỉ ADMIN
+ * router.get('/users', authenticate, authorize(ROLES.ADMIN), controller.getUsers);
+ *
+ * @example
+ * // ADMIN và MANAGER
+ * router.get('/reports', authenticate, authorize(ROLES.ADMIN, ROLES.MANAGER), controller.getReports);
+ */
+const authorize = (...allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: MESSAGES.TOKEN_MISSING,
+        error: 'TOKEN_MISSING',
+      });
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: MESSAGES.FORBIDDEN,
+        error: 'FORBIDDEN',
+      });
+    }
+
+    next();
+  };
 };
 
-module.exports = { requireAdmin };
+// ========== Shorthand middlewares hay dùng ==========
+
+/** Chỉ Admin */
+const requireAdmin = authorize(ROLES.ADMIN);
+
+/** Admin hoặc Manager */
+const requireAdminOrManager = authorize(ROLES.ADMIN, ROLES.MANAGER);
+
+/** Admin, Manager hoặc Cashier (nhân viên nội bộ) */
+const requireStaff = authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.CASHIER);
+
+/** Chỉ Customer (Mobile App) */
+const requireCustomer = authorize(ROLES.CUSTOMER);
+
+/** Tất cả user đã đăng nhập (bao gồm cả Customer) */
+const requireAuth = authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.CASHIER, ROLES.CUSTOMER);
+
+module.exports = {
+  authorize,
+  requireAdmin,
+  requireAdminOrManager,
+  requireStaff,
+  requireCustomer,
+  requireAuth,
+};

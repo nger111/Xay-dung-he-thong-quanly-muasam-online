@@ -1,46 +1,55 @@
+/**
+ * backend/src/routes/auth.routes.js
+ * Routes cho Authentication & User Management
+ * Base: /api/v1/auth và /api/v1/users
+ */
+
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const { authenticate } = require('../middlewares/auth.middleware');
-const { requireAdmin } = require('../middlewares/role.middleware');
+const { requireAdmin, requireAuth } = require('../middlewares/role.middleware');
 const { validate } = require('../middlewares/validate.middleware');
-const { loginSchema, changePasswordSchema, createUserSchema } = require('../validators/auth.validator');
+const {
+  loginSchema,
+  registerSchema,
+  changePasswordSchema,
+  createUserSchema,
+  updateProfileSchema,
+} = require('../validators/auth.validator');
+
+// ========== PUBLIC (không cần token) ==========
 
 /**
  * @swagger
- * tags:
- *   name: Auth
- *   description: Xác thực và quản lý tài khoản
+ * /auth/register:
+ *   post:
+ *     summary: Đăng ký tài khoản Khách hàng (Mobile)
+ *     tags: [Auth]
+ *     security: []
  */
+router.post('/register', validate(registerSchema), authController.register);
 
 /**
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Đăng nhập hệ thống
+ *     summary: Đăng nhập hệ thống (Web & Mobile)
  *     tags: [Auth]
  *     security: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [username, password]
- *             properties:
- *               username:
- *                 type: string
- *                 example: admin
- *               password:
- *                 type: string
- *                 example: Admin@123
- *     responses:
- *       200:
- *         description: Đăng nhập thành công, trả về JWT token
- *       401:
- *         description: Sai thông tin đăng nhập
  */
 router.post('/login', validate(loginSchema), authController.login);
+
+// ========== PRIVATE (cần token) ==========
+
+/**
+ * @swagger
+ * /auth/logout:
+ *   post:
+ *     summary: Đăng xuất
+ *     tags: [Auth]
+ */
+router.post('/logout', authenticate, authController.logout);
 
 /**
  * @swagger
@@ -48,11 +57,17 @@ router.post('/login', validate(loginSchema), authController.login);
  *   get:
  *     summary: Lấy thông tin người dùng đang đăng nhập
  *     tags: [Auth]
- *     responses:
- *       200:
- *         description: Thông tin người dùng
  */
 router.get('/me', authenticate, authController.getMe);
+
+/**
+ * @swagger
+ * /auth/me:
+ *   put:
+ *     summary: Cập nhật thông tin cá nhân
+ *     tags: [Auth]
+ */
+router.put('/me', authenticate, validate(updateProfileSchema), authController.updateProfile);
 
 /**
  * @swagger
@@ -60,28 +75,50 @@ router.get('/me', authenticate, authController.getMe);
  *   post:
  *     summary: Đổi mật khẩu
  *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [old_password, new_password, confirm_password]
- *             properties:
- *               old_password:
- *                 type: string
- *               new_password:
- *                 type: string
- *               confirm_password:
- *                 type: string
- *     responses:
- *       200:
- *         description: Đổi mật khẩu thành công
  */
-router.post('/change-password', authenticate, validate(changePasswordSchema), authController.changePassword);
+router.post(
+  '/change-password',
+  authenticate,
+  validate(changePasswordSchema),
+  authController.changePassword
+);
 
-router.post('/logout', authenticate, authController.logout);
+// ========== ADMIN ONLY: Quản lý tài khoản nhân viên ==========
+
+/**
+ * @swagger
+ * /users:
+ *   get:
+ *     summary: Danh sách tài khoản (Admin)
+ *     tags: [Users]
+ */
 router.get('/users', authenticate, requireAdmin, authController.getAllUsers);
+
+/**
+ * @swagger
+ * /users:
+ *   post:
+ *     summary: Tạo tài khoản nhân viên (Admin)
+ *     tags: [Users]
+ */
 router.post('/users', authenticate, requireAdmin, validate(createUserSchema), authController.createUser);
+
+/**
+ * @swagger
+ * /users/{id}/lock:
+ *   patch:
+ *     summary: Khóa tài khoản (Admin)
+ *     tags: [Users]
+ */
+router.patch('/users/:id/lock', authenticate, requireAdmin, authController.lockUser);
+
+/**
+ * @swagger
+ * /users/{id}/unlock:
+ *   patch:
+ *     summary: Mở khóa tài khoản (Admin)
+ *     tags: [Users]
+ */
+router.patch('/users/:id/unlock', authenticate, requireAdmin, authController.unlockUser);
 
 module.exports = router;

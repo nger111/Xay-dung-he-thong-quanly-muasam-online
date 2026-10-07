@@ -1,33 +1,48 @@
-const statisticsService = require('../services/statisticsService');
+/**
+ * backend/src/controllers/statisticsController.js
+ * Controller cho Báo cáo & Thống kê doanh thu
+ */
 
+const statisticsService = require('../services/statisticsService');
+const { success } = require('../utils/response');
+
+/** GET /api/v1/reports/dashboard — Tổng quan dashboard */
 const getDashboard = async (req, res) => {
   const data = await statisticsService.getDashboard();
-  res.json({ success: true, message: 'OK', data });
+  success(res, { message: 'Lấy dữ liệu dashboard thành công', data });
 };
 
-const getDailyRevenue = async (req, res) => {
-  const { fromDate, toDate } = req.query;
-  const from = fromDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const to = toDate || new Date().toISOString().slice(0, 10);
-  const data = await statisticsService.getDailyRevenue(from, to);
-  res.json({ success: true, message: 'OK', data: { revenue: data, fromDate: from, toDate: to } });
+/** GET /api/v1/reports/revenue — Doanh thu theo ngày trong khoảng thời gian */
+const getRevenue = async (req, res) => {
+  const { from_date, to_date, type = 'daily' } = req.query;
+  const data = await statisticsService.getRevenue({ from_date, to_date, type });
+  success(res, { message: 'Lấy báo cáo doanh thu thành công', data });
 };
 
-const getWeeklyRevenue = async (req, res) => {
-  const data = await statisticsService.getWeeklyRevenue();
-  res.json({ success: true, message: 'OK', data: { revenue: data } });
+/** GET /api/v1/reports/products/top-selling — Top sản phẩm bán chạy */
+const getTopSellingProducts = async (req, res) => {
+  const { from_date, to_date, limit = 10 } = req.query;
+  const data = await statisticsService.getTopProducts(from_date, to_date, parseInt(limit));
+  success(res, { message: 'Lấy top sản phẩm bán chạy thành công', data: { products: data } });
 };
 
-const getMonthlyRevenue = async (req, res) => {
-  const year = req.query.year || new Date().getFullYear();
-  const data = await statisticsService.getMonthlyRevenue(year);
-  res.json({ success: true, message: 'OK', data: { revenue: data, year: parseInt(year) } });
+/** GET /api/v1/reports/inventory — Báo cáo tồn kho + cảnh báo */
+const getInventoryReport = async (req, res) => {
+  const data = await statisticsService.getInventoryReport();
+  success(res, { message: 'Lấy báo cáo tồn kho thành công', data });
 };
 
-const getTopProducts = async (req, res) => {
-  const { fromDate, toDate, limit = 10 } = req.query;
-  const data = await statisticsService.getTopProducts(fromDate, toDate, limit);
-  res.json({ success: true, message: 'OK', data: { products: data, total: data.length } });
+/** GET /api/v1/reports/profit — Báo cáo lợi nhuận gộp (Doanh thu - Giá vốn COGS) */
+const getProfitReport = async (req, res) => {
+  const { from_date, to_date } = req.query;
+  const data = await statisticsService.getProfitReport(from_date, to_date);
+  success(res, { message: 'Lấy báo cáo lợi nhuận thành công', data });
 };
 
-module.exports = { getDashboard, getDailyRevenue, getWeeklyRevenue, getMonthlyRevenue, getTopProducts };
+module.exports = {
+  getDashboard,
+  getRevenue,
+  getTopSellingProducts,
+  getInventoryReport,
+  getProfitReport,
+};

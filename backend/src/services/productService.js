@@ -1,4 +1,11 @@
+/**
+ * backend/src/services/productService.js
+ * Business logic quản lý Sản phẩm
+ */
+
 const pool = require('../config/database');
+const createError = require('../utils/createError');
+const MESSAGES = require('../constants/messages');
 
 /** Lấy danh sách sản phẩm có filter, search, phân trang */
 const getAllProducts = async ({ search = '', category_id, supplier_id, status = 'ACTIVE', page = 1, limit = 20 }) => {
@@ -6,10 +13,22 @@ const getAllProducts = async ({ search = '', category_id, supplier_id, status = 
   const params = [];
   let whereClause = 'WHERE 1=1';
 
-  if (status) { whereClause += ' AND p.status = ?'; params.push(status); }
-  if (search) { whereClause += ' AND (p.name LIKE ? OR p.barcode LIKE ? OR p.product_code LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
-  if (category_id) { whereClause += ' AND p.category_id = ?'; params.push(category_id); }
-  if (supplier_id) { whereClause += ' AND p.supplier_id = ?'; params.push(supplier_id); }
+  if (status && status !== 'ALL') {
+    whereClause += ' AND p.status = ?';
+    params.push(status);
+  }
+  if (search) {
+    whereClause += ' AND (p.name LIKE ? OR p.barcode LIKE ? OR p.product_code LIKE ?)';
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+  if (category_id) {
+    whereClause += ' AND p.category_id = ?';
+    params.push(category_id);
+  }
+  if (supplier_id) {
+    whereClause += ' AND p.supplier_id = ?';
+    params.push(supplier_id);
+  }
 
   const sql = `
     SELECT p.*,
@@ -50,7 +69,7 @@ const getProductById = async (id) => {
     WHERE p.id = ?`, [id]);
 
   if (!rows[0]) {
-    const err = new Error('Không tìm thấy sản phẩm.'); err.statusCode = 404; throw err;
+    throw createError(MESSAGES.PRODUCT_NOT_FOUND, 404, 'PRODUCT_NOT_FOUND');
   }
 
   const product = rows[0];
@@ -81,7 +100,26 @@ const getProductByBarcode = async (barcode) => {
     WHERE p.barcode = ?`, [barcode]);
 
   if (!rows[0]) {
-    const err = new Error('Không tìm thấy sản phẩm với mã vạch này.'); err.statusCode = 404; throw err;
+    throw createError(MESSAGES.BARCODE_NOT_FOUND, 404, 'PRODUCT_NOT_FOUND');
+  }
+  return rows[0];
+};
+
+/** Tìm sản phẩm theo SKU / Mã sản phẩm */
+const getProductBySku = async (sku) => {
+  const [rows] = await pool.query(`
+    SELECT p.*, c.name AS category_name, s.name AS supplier_name,
+           sp.floor_number, sp.position_number, sp.label AS shelf_label, sh.name AS shelf_name,
+           (SELECT image_url FROM product_images WHERE product_id = p.id AND is_main = 1 LIMIT 1) AS main_image
+    FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN suppliers s ON p.supplier_id = s.id
+    LEFT JOIN shelf_positions sp ON p.shelf_position_id = sp.id
+    LEFT JOIN shelves sh ON sp.shelf_id = sh.id
+    WHERE p.product_code = ?`, [sku]);
+
+  if (!rows[0]) {
+    throw createError('Không tìm thấy sản phẩm với SKU này.', 404, 'PRODUCT_NOT_FOUND');
   }
   return rows[0];
 };
@@ -102,24 +140,28 @@ const searchProducts = async (keyword) => {
 
 /** Thêm sản phẩm mới */
 const createProduct = async (data) => {
+  const productCode = data.sku || data.product_code || `SP${Date.now().toString().slice(-6)}`;
+  const importPrice = data.cost_price || data.import_price || 0;
+
   // Kiểm tra barcode trùng
   const [existBarcode] = await pool.query('SELECT id FROM products WHERE barcode = ?', [data.barcode]);
   if (existBarcode[0]) {
-    const err = new Error(`Mã vạch "${data.barcode}" đã tồn tại.`); err.statusCode = 409; throw err;
+    throw createError(MESSAGES.BARCODE_DUPLICATE, 409, 'BARCODE_DUPLICATE');
   }
+
   // Kiểm tra product_code trùng
-  const [existCode] = await pool.query('SELECT id FROM products WHERE product_code = ?', [data.product_code]);
+  const [existCode] = await pool.query('SELECT id FROM products WHERE product_code = ?', [productCode]);
   if (existCode[0]) {
-    const err = new Error(`Mã sản phẩm "${data.product_code}" đã tồn tại.`); err.statusCode = 409; throw err;
+    throw createError('Mã SKU / mã sản phẩm đã tồn tại.', 409, 'SKU_DUPLICATE');
   }
 
   const [result] = await pool.query(`
     INSERT INTO products (product_code, barcode, name, category_id, supplier_id, unit,
-      import_price, selling_price, stock_quantity, min_stock_level, shelf_position_id, description)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-    [data.product_code, data.barcode, data.name, data.category_id || null, data.supplier_id || null,
-     data.unit || 'cái', data.import_price, data.selling_price, data.min_stock_level || 5,
-     data.shelf_position_id || null, data.description || null]);
+      import_price, selling_price, stock_quantity, min_stock_level, shelf_position_id, description, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+    [productCode, data.barcode, data.name, data.category_id || null, data.supplier_id || null,
+     data.unit || 'cái', importPrice, data.selling_price, data.min_stock_level || 5,
+     data.shelf_position_id || null, data.description || null, data.status || 'ACTIVE']);
 
   return getProductById(result.insertId);
 };
@@ -127,43 +169,72 @@ const createProduct = async (data) => {
 /** Cập nhật sản phẩm */
 const updateProduct = async (id, data) => {
   const [existing] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
-  if (!existing[0]) { const err = new Error('Không tìm thấy sản phẩm.'); err.statusCode = 404; throw err; }
+  if (!existing[0]) {
+    throw createError(MESSAGES.PRODUCT_NOT_FOUND, 404, 'PRODUCT_NOT_FOUND');
+  }
 
-  // Kiểm tra barcode trùng (nếu có thay đổi)
+  // Kiểm tra barcode trùng nếu đổi barcode
   if (data.barcode && data.barcode !== existing[0].barcode) {
     const [dup] = await pool.query('SELECT id FROM products WHERE barcode = ? AND id != ?', [data.barcode, id]);
-    if (dup[0]) { const err = new Error('Mã vạch đã được dùng bởi sản phẩm khác.'); err.statusCode = 409; throw err; }
+    if (dup[0]) {
+      throw createError(MESSAGES.BARCODE_DUPLICATE, 409, 'BARCODE_DUPLICATE');
+    }
   }
+
+  // Hỗ trợ map sku -> product_code, cost_price -> import_price
+  const productCode = data.sku || data.product_code;
+  const importPrice = data.cost_price !== undefined ? data.cost_price : data.import_price;
 
   const fields = [];
   const values = [];
-  const allowed = ['product_code', 'barcode', 'name', 'category_id', 'supplier_id', 'unit',
-    'import_price', 'selling_price', 'min_stock_level', 'shelf_position_id', 'description', 'status'];
 
-  for (const key of allowed) {
-    if (data[key] !== undefined) { fields.push(`${key} = ?`); values.push(data[key]); }
+  const updateMap = {
+    product_code: productCode,
+    barcode: data.barcode,
+    name: data.name,
+    category_id: data.category_id,
+    supplier_id: data.supplier_id,
+    unit: data.unit,
+    import_price: importPrice,
+    selling_price: data.selling_price,
+    min_stock_level: data.min_stock_level,
+    shelf_position_id: data.shelf_position_id,
+    description: data.description,
+    status: data.status,
+  };
+
+  for (const [col, val] of Object.entries(updateMap)) {
+    if (val !== undefined) {
+      fields.push(`${col} = ?`);
+      values.push(val);
+    }
   }
 
-  if (fields.length === 0) { return getProductById(id); }
+  if (fields.length > 0) {
+    await pool.query(`UPDATE products SET ${fields.join(', ')} WHERE id = ?`, [...values, id]);
+  }
 
-  await pool.query(`UPDATE products SET ${fields.join(', ')} WHERE id = ?`, [...values, id]);
   return getProductById(id);
 };
 
 /** Xóa hoặc ẩn sản phẩm */
 const deleteProduct = async (id) => {
   const [existing] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
-  if (!existing[0]) { const err = new Error('Không tìm thấy sản phẩm.'); err.statusCode = 404; throw err; }
+  if (!existing[0]) {
+    throw createError(MESSAGES.PRODUCT_NOT_FOUND, 404, 'PRODUCT_NOT_FOUND');
+  }
 
-  // Nếu đã có trong hoá đơn thì chỉ ẩn, không xóa thật
+  // Nếu đã có trong hoá đơn hoặc phiếu nhập thì chuyển INACTIVE để bảo toàn toàn vẹn dữ liệu
   const [inOrders] = await pool.query('SELECT id FROM sales_order_details WHERE product_id = ? LIMIT 1', [id]);
-  if (inOrders[0]) {
+  const [inImports] = await pool.query('SELECT id FROM import_receipt_details WHERE product_id = ? LIMIT 1', [id]);
+
+  if (inOrders[0] || inImports[0]) {
     await pool.query("UPDATE products SET status = 'INACTIVE' WHERE id = ?", [id]);
-    return { message: 'Sản phẩm đã được ẩn (không thể xóa vì đã có trong hoá đơn bán hàng).' };
+    return { message: MESSAGES.PRODUCT_HIDDEN };
   }
 
   await pool.query('DELETE FROM products WHERE id = ?', [id]);
-  return { message: 'Xóa sản phẩm thành công.' };
+  return { message: MESSAGES.PRODUCT_DELETED };
 };
 
 /** Sản phẩm đã hết hạn */
@@ -197,4 +268,15 @@ const getExpiringSoonProducts = async (days = 30) => {
   return rows;
 };
 
-module.exports = { getAllProducts, getProductById, getProductByBarcode, searchProducts, createProduct, updateProduct, deleteProduct, getExpiredProducts, getExpiringSoonProducts };
+module.exports = {
+  getAllProducts,
+  getProductById,
+  getProductByBarcode,
+  getProductBySku,
+  searchProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  getExpiredProducts,
+  getExpiringSoonProducts,
+};

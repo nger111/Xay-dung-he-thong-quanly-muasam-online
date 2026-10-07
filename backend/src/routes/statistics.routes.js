@@ -1,29 +1,79 @@
+/**
+ * backend/src/routes/statistics.routes.js
+ * Routes cho Báo cáo & Thống kê
+ * Base: /api/v1/reports
+ *
+ * Phân quyền: Admin và Manager
+ */
+
 const express = require('express');
 const router = express.Router();
 const statisticsController = require('../controllers/statisticsController');
 const { authenticate } = require('../middlewares/auth.middleware');
+const { requireAdminOrManager } = require('../middlewares/role.middleware');
 
 /**
  * @swagger
- * tags:
- *   name: Statistics
- *   description: Báo cáo thống kê
- */
-
-/**
- * @swagger
- * /statistics/dashboard:
+ * /reports/dashboard:
  *   get:
- *     summary: Thông tin tổng quan (doanh thu hôm nay, tồn kho, v.v.)
- *     tags: [Statistics]
- *     responses:
- *       200:
- *         description: Dữ liệu dashboard
+ *     summary: Dashboard tổng quan — Doanh thu hôm nay, cảnh báo tồn kho, v.v.
+ *     tags: [Reports]
  */
-router.get('/dashboard', authenticate, statisticsController.getDashboard);
-router.get('/revenue/daily', authenticate, statisticsController.getDailyRevenue);
-router.get('/revenue/weekly', authenticate, statisticsController.getWeeklyRevenue);
-router.get('/revenue/monthly', authenticate, statisticsController.getMonthlyRevenue);
-router.get('/top-products', authenticate, statisticsController.getTopProducts);
+router.get('/dashboard', authenticate, requireAdminOrManager, statisticsController.getDashboard);
+
+/**
+ * @swagger
+ * /reports/revenue:
+ *   get:
+ *     summary: Báo cáo doanh thu theo ngày hoặc theo tháng
+ *     tags: [Reports]
+ *     parameters:
+ *       - in: query
+ *         name: from_date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         example: "2026-01-01"
+ *       - in: query
+ *         name: to_date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         example: "2026-12-31"
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [daily, monthly]
+ *         default: daily
+ */
+router.get('/revenue', authenticate, requireAdminOrManager, statisticsController.getRevenue);
+
+/**
+ * @swagger
+ * /reports/products/top-selling:
+ *   get:
+ *     summary: Top sản phẩm bán chạy
+ *     tags: [Reports]
+ */
+router.get('/products/top-selling', authenticate, requireAdminOrManager, statisticsController.getTopSellingProducts);
+
+/**
+ * @swagger
+ * /reports/inventory:
+ *   get:
+ *     summary: Báo cáo tồn kho — hết hàng, sắp hết, sắp hết hạn
+ *     tags: [Reports]
+ */
+router.get('/inventory', authenticate, requireAdminOrManager, statisticsController.getInventoryReport);
+
+/**
+ * @swagger
+ * /reports/profit:
+ *   get:
+ *     summary: Báo cáo lợi nhuận gộp (Doanh thu - Giá vốn COGS)
+ *     tags: [Reports]
+ */
+router.get('/profit', authenticate, requireAdminOrManager, statisticsController.getProfitReport);
 
 module.exports = router;

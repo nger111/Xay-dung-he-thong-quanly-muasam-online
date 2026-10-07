@@ -1,14 +1,13 @@
-const pool = require('../config/database');
+/**
+ * backend/src/services/orderService.js
+ * Business logic cho Quản lý Đơn hàng & Bán hàng POS
+ * Áp dụng Transaction & FEFO (First Expired, First Out)
+ */
 
-/** Tạo mã hoá đơn tự động: HD20240901_0001 */
-const generateOrderCode = async (conn) => {
-  const today = new Date();
-  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-  const [[{ count }]] = await conn.query(
-    'SELECT COUNT(*) AS count FROM sales_orders WHERE DATE(created_at) = CURDATE()'
-  );
-  return `HD${dateStr}${String(count + 1).padStart(4, '0')}`;
-};
+const pool = require('../config/database');
+const { generateOrderCode } = require('../utils/generateCode');
+const createError = require('../utils/createError');
+const MESSAGES = require('../constants/messages');
 
 /** Lấy danh sách hoá đơn */
 const getAllOrders = async ({ from_date, to_date, user_id, status, page = 1, limit = 20 }) => {
@@ -46,10 +45,12 @@ const getOrderById = async (id) => {
     FROM sales_orders so LEFT JOIN users u ON so.user_id = u.id
     WHERE so.id = ?`, [id]);
 
-  if (!orderRows[0]) { const err = new Error('Không tìm thấy hoá đơn.'); err.statusCode = 404; throw err; }
+  if (!orderRows[0]) {
+    throw createError(MESSAGES.ORDER_NOT_FOUND, 404, 'ORDER_NOT_FOUND');
+  }
 
   const [details] = await pool.query(`
-    SELECT sod.*, p.barcode AS product_barcode
+    SELECT sod.*, p.barcode AS product_barcode, p.unit
     FROM sales_order_details sod
     LEFT JOIN products p ON sod.product_id = p.id
     WHERE sod.order_id = ?`, [id]);
@@ -59,65 +60,163 @@ const getOrderById = async (id) => {
   return { ...orderRows[0], items: details, payment: payment[0] || null };
 };
 
+/** Quét mã vạch sản phẩm tại POS / Mobile Scanner */
+const scanBarcode = async (barcode) => {
+  if (!barcode) {
+    throw createError('Mã vạch không được để trống.', 400, 'BARCODE_REQUIRED');
+  }
+
+  const [rows] = await pool.query(`
+    SELECT p.*, c.name AS category_name,
+           sp.floor_number, sp.position_number, sp.label AS shelf_label,
+           sh.name AS shelf_name,
+           (SELECT image_url FROM product_images WHERE product_id = p.id AND is_main = 1 LIMIT 1) AS main_image
+    FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN shelf_positions sp ON p.shelf_position_id = sp.id
+    LEFT JOIN shelves sh ON sp.shelf_id = sh.id
+    WHERE p.barcode = ? AND p.status = 'ACTIVE'`, [barcode]);
+
+  if (!rows[0]) {
+    throw createError(MESSAGES.BARCODE_NOT_FOUND, 404, 'PRODUCT_NOT_FOUND');
+  }
+
+  const product = rows[0];
+
+  // Lấy các lô hàng còn tồn theo FEFO (hạn sử dụng sớm nhất xếp trước)
+  const [batches] = await pool.query(`
+    SELECT id, batch_code, quantity, expiry_date, DATEDIFF(expiry_date, CURDATE()) AS days_remaining
+    FROM inventory_batches
+    WHERE product_id = ? AND status = 'ACTIVE' AND quantity > 0
+    ORDER BY expiry_date ASC, id ASC`, [product.id]);
+
+  return {
+    ...product,
+    available_batches: batches,
+  };
+};
+
 /**
- * Tạo hoá đơn bán hàng — TRANSACTION
- * Tạo hoá đơn + chi tiết + thanh toán + trừ tồn kho trong 1 transaction
+ * Trừ tồn kho theo thuật toán FEFO (First Expired, First Out)
+ * Ưu tiên xuất lô có hạn dùng gần nhất trước
+ * @param {object} conn - MySQL transaction connection
+ * @param {number} productId
+ * @param {number} quantityNeeded
  */
-const createOrder = async (orderData, userId) => {
-  const { items, cash_received, payment_method = 'TIEN_MAT', note } = orderData;
+const deductStockFEFO = async (conn, productId, quantityNeeded) => {
+  // 1. Khóa và lấy các lô hàng còn hàng của sản phẩm, sắp xếp HSD tăng dần
+  const [batches] = await conn.query(`
+    SELECT id, quantity, expiry_date
+    FROM inventory_batches
+    WHERE product_id = ? AND status = 'ACTIVE' AND quantity > 0
+    ORDER BY expiry_date ASC, id ASC
+    FOR UPDATE`, [productId]);
+
+  let remaining = quantityNeeded;
+
+  for (const batch of batches) {
+    if (remaining <= 0) break;
+
+    const deduct = Math.min(batch.quantity, remaining);
+    const newQty = batch.quantity - deduct;
+    const newStatus = newQty === 0 ? 'DEPLETED' : 'ACTIVE';
+
+    await conn.query(
+      'UPDATE inventory_batches SET quantity = ?, status = ? WHERE id = ?',
+      [newQty, newStatus, batch.id]
+    );
+
+    remaining -= deduct;
+  }
+
+  // 2. Trừ tổng tồn kho trong bảng products
+  await conn.query(
+    'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
+    [quantityNeeded, productId]
+  );
+};
+
+/**
+ * Tạo hoá đơn bán hàng POS — TRANSACTION + FEFO
+ * @param {object} orderData - { items, cash_received, payment_method, note }
+ * @param {number} userId - ID thu ngân / nhân viên bán
+ */
+const createPosOrder = async (orderData, userId) => {
+  const { items, cash_received = 0, payment_method = 'TIEN_MAT', note } = orderData;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    throw createError('Đơn hàng phải có ít nhất 1 sản phẩm.', 400, 'EMPTY_ORDER');
+  }
+
   const conn = await pool.getConnection();
 
   try {
     await conn.beginTransaction();
 
-    // ── 1. Kiểm tra tất cả sản phẩm và tồn kho ──
+    // ── 1. Kiểm tra tất cả sản phẩm & tồn kho với FOR UPDATE ──
     const productSnapshots = [];
     let total_amount = 0;
 
     for (const item of items) {
-      // FOR UPDATE: khóa row để tránh race condition khi nhiều người bán cùng lúc
+      if (!item.product_id || !item.quantity || item.quantity <= 0) {
+        throw createError('Dữ liệu sản phẩm trong giỏ hàng không hợp lệ.', 400, 'INVALID_ITEM');
+      }
+
       const [[product]] = await conn.query(
         'SELECT id, name, barcode, selling_price, stock_quantity FROM products WHERE id = ? AND status = "ACTIVE" FOR UPDATE',
         [item.product_id]
       );
 
       if (!product) {
-        throw Object.assign(new Error(`Sản phẩm ID ${item.product_id} không tồn tại.`), { statusCode: 404 });
+        throw createError(`Sản phẩm ID ${item.product_id} không tồn tại hoặc đã ngừng kinh doanh.`, 404, 'PRODUCT_NOT_FOUND');
       }
+
       if (product.stock_quantity < item.quantity) {
-        throw Object.assign(
-          new Error(`"${product.name}" không đủ số lượng. Tồn kho: ${product.stock_quantity}, cần: ${item.quantity}`),
-          { statusCode: 400 }
+        throw createError(
+          `"${product.name}" không đủ số lượng trong kho. Hiện có: ${product.stock_quantity}, cần: ${item.quantity}.`,
+          400,
+          'INSUFFICIENT_STOCK'
         );
       }
 
-      const subtotal = item.unit_price * item.quantity;
+      const unit_price = item.unit_price !== undefined ? parseFloat(item.unit_price) : parseFloat(product.selling_price);
+      const subtotal = unit_price * item.quantity;
       total_amount += subtotal;
-      productSnapshots.push({ ...item, product_name: product.name, barcode: product.barcode, subtotal });
+
+      productSnapshots.push({
+        product_id: product.id,
+        product_name: product.name,
+        barcode: product.barcode,
+        unit_price,
+        quantity: item.quantity,
+        subtotal,
+      });
     }
 
-    // ── 2. Kiểm tra tiền khách đưa ──
-    if (cash_received < total_amount) {
-      throw Object.assign(
-        new Error(`Tiền khách đưa (${cash_received.toLocaleString()}đ) không đủ. Tổng tiền: ${total_amount.toLocaleString()}đ`),
-        { statusCode: 400 }
+    // ── 2. Kiểm tra tiền khách đưa nếu thanh toán tiền mặt ──
+    const received = parseFloat(cash_received);
+    if (payment_method === 'TIEN_MAT' && received < total_amount) {
+      throw createError(
+        `Số tiền khách đưa (${received.toLocaleString()}đ) không đủ so với tổng hoá đơn (${total_amount.toLocaleString()}đ).`,
+        400,
+        'INSUFFICIENT_CASH'
       );
     }
 
-    const change_amount = cash_received - total_amount;
+    const change_amount = Math.max(0, received - total_amount);
 
     // ── 3. Tạo mã hoá đơn ──
     const order_code = await generateOrderCode(conn);
 
-    // ── 4. INSERT hoá đơn ──
-    const [[insertResult]] = await conn.query(`
-      INSERT INTO sales_orders (order_code, user_id, total_amount, cash_received, change_amount, payment_method, note)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [order_code, userId, total_amount, cash_received, change_amount, payment_method, note || null]
+    // ── 4. Lưu hoá đơn (sales_orders) ──
+    const [insertResult] = await conn.query(`
+      INSERT INTO sales_orders (order_code, user_id, total_amount, cash_received, change_amount, payment_method, status, note)
+      VALUES (?, ?, ?, ?, ?, ?, 'COMPLETED', ?)`,
+      [order_code, userId, total_amount, received, change_amount, payment_method, note || null]
     );
     const orderId = insertResult.insertId;
 
-    // ── 5. INSERT chi tiết hoá đơn + trừ tồn kho ──
+    // ── 5. Lưu chi tiết hoá đơn & trừ kho theo FEFO ──
     for (const item of productSnapshots) {
       await conn.query(`
         INSERT INTO sales_order_details (order_id, product_id, product_name, barcode, unit_price, quantity, subtotal)
@@ -125,57 +224,20 @@ const createOrder = async (orderData, userId) => {
         [orderId, item.product_id, item.product_name, item.barcode, item.unit_price, item.quantity, item.subtotal]
       );
 
-      // Trừ tồn kho — thao tác quan trọng nhất, phải trong transaction
-      await conn.query(
-        'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
-        [item.quantity, item.product_id]
-      );
+      // Trừ kho FEFO
+      await deductStockFEFO(conn, item.product_id, item.quantity);
     }
 
-    // ── 6. INSERT thanh toán ──
-    await conn.query(
-      'INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, "COMPLETED")',
+    // ── 6. Lưu bản ghi thanh toán ──
+    await conn.query(`
+      INSERT INTO payments (order_id, amount, method, status)
+      VALUES (?, ?, ?, 'COMPLETED')`,
       [orderId, total_amount, payment_method]
     );
 
-    // ── 7. COMMIT — lưu tất cả vào database ──
     await conn.commit();
 
-    // Trả về hoá đơn vừa tạo
     return getOrderById(orderId);
-
-  } catch (err) {
-    // Nếu bất kỳ bước nào lỗi → ROLLBACK toàn bộ
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release(); // Luôn trả connection về pool
-  }
-};
-
-/** Huỷ hoá đơn (Admin only) — Hoàn tồn kho */
-const cancelOrder = async (id) => {
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-
-    const [[order]] = await conn.query('SELECT * FROM sales_orders WHERE id = ? FOR UPDATE', [id]);
-    if (!order) throw Object.assign(new Error('Không tìm thấy hoá đơn.'), { statusCode: 404 });
-    if (order.status === 'CANCELLED') throw Object.assign(new Error('Hoá đơn đã bị huỷ trước đó.'), { statusCode: 400 });
-
-    // Lấy chi tiết để hoàn kho
-    const [details] = await conn.query('SELECT * FROM sales_order_details WHERE order_id = ?', [id]);
-
-    // Hoàn tồn kho cho từng sản phẩm
-    for (const item of details) {
-      await conn.query('UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?', [item.quantity, item.product_id]);
-    }
-
-    await conn.query("UPDATE sales_orders SET status = 'CANCELLED' WHERE id = ?", [id]);
-    await conn.query("UPDATE payments SET status = 'REFUNDED' WHERE order_id = ?", [id]);
-
-    await conn.commit();
-    return { message: 'Huỷ hoá đơn thành công. Tồn kho đã được hoàn lại.' };
   } catch (err) {
     await conn.rollback();
     throw err;
@@ -184,4 +246,50 @@ const cancelOrder = async (id) => {
   }
 };
 
-module.exports = { getAllOrders, getOrderById, createOrder, cancelOrder };
+/**
+ * Đặt hàng online từ Mobile (Customer)
+ * Tương tự POS nhưng xử lý trạng thái linh hoạt
+ */
+const createOrder = async (orderData, userId) => {
+  // Mobile customer order cũng dùng logic trừ tồn FEFO tương tự POS
+  return createPosOrder(orderData, userId);
+};
+
+/** Huỷ hoá đơn — Hoàn lại tồn kho */
+const cancelOrder = async (id) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[order]] = await conn.query('SELECT * FROM sales_orders WHERE id = ? FOR UPDATE', [id]);
+    if (!order) throw createError(MESSAGES.ORDER_NOT_FOUND, 404, 'ORDER_NOT_FOUND');
+    if (order.status === 'CANCELLED') throw createError(MESSAGES.ORDER_ALREADY_CANCELLED, 400, 'ORDER_ALREADY_CANCELLED');
+
+    // Lấy chi tiết đơn để hoàn tồn
+    const [details] = await conn.query('SELECT * FROM sales_order_details WHERE order_id = ?', [id]);
+
+    for (const item of details) {
+      await conn.query('UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?', [item.quantity, item.product_id]);
+    }
+
+    await conn.query("UPDATE sales_orders SET status = 'CANCELLED' WHERE id = ?", [id]);
+    await conn.query("UPDATE payments SET status = 'REFUNDED' WHERE order_id = ?", [id]);
+
+    await conn.commit();
+    return { message: MESSAGES.ORDER_CANCELLED };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+};
+
+module.exports = {
+  getAllOrders,
+  getOrderById,
+  scanBarcode,
+  createPosOrder,
+  createOrder,
+  cancelOrder,
+};

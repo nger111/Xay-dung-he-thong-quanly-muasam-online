@@ -1,51 +1,64 @@
-const productService = require('../services/productService');
+/**
+ * backend/src/controllers/productController.js
+ * Controller quản lý Sản phẩm
+ */
 
+const productService = require('../services/productService');
+const { success, buildPagination } = require('../utils/response');
+const MESSAGES = require('../constants/messages');
+
+/** GET /api/v1/products — Danh sách sản phẩm có filter, search, phân trang */
 const getAllProducts = async (req, res) => {
   const result = await productService.getAllProducts(req.query);
-  res.json({ success: true, message: 'OK', data: result });
+  success(res, {
+    message: 'Lấy danh sách sản phẩm thành công',
+    data: { products: result.products },
+    pagination: buildPagination(result),
+  });
 };
 
+/** GET /api/v1/products/:id — Chi tiết sản phẩm */
 const getProductById = async (req, res) => {
-  const product = await productService.getProductById(req.params.id);
-  res.json({ success: true, message: 'OK', data: { product } });
+  const product = await productService.getProductById(parseInt(req.params.id));
+  success(res, { message: 'Lấy thông tin sản phẩm thành công', data: { product } });
 };
 
+/** GET /api/v1/products/barcode/:barcode — Tìm theo mã vạch */
 const getProductByBarcode = async (req, res) => {
   const product = await productService.getProductByBarcode(req.params.barcode);
-  res.json({ success: true, message: 'OK', data: { product } });
+  success(res, { message: 'Tìm thấy sản phẩm', data: { product } });
 };
 
-const searchProducts = async (req, res) => {
-  const { q = '' } = req.query;
-  if (!q.trim()) return res.json({ success: true, message: 'OK', data: { products: [] } });
-  const products = await productService.searchProducts(q);
-  res.json({ success: true, message: 'OK', data: { products, total: products.length } });
+/** GET /api/v1/products/sku/:sku — Tìm theo SKU */
+const getProductBySku = async (req, res) => {
+  const product = await productService.getProductBySku(req.params.sku);
+  success(res, { message: 'Tìm thấy sản phẩm', data: { product } });
 };
 
-const getExpiredProducts = async (req, res) => {
-  const products = await productService.getExpiredProducts();
-  res.json({ success: true, message: 'OK', data: { products, total: products.length } });
-};
-
-const getExpiringSoonProducts = async (req, res) => {
-  const days = req.query.days || 30;
-  const products = await productService.getExpiringSoonProducts(days);
-  res.json({ success: true, message: 'OK', data: { products, total: products.length, days: parseInt(days) } });
-};
-
+/** POST /api/v1/products — Thêm sản phẩm mới */
 const createProduct = async (req, res) => {
   const product = await productService.createProduct(req.body);
-  res.status(201).json({ success: true, message: 'Thêm sản phẩm thành công!', data: { product } });
+  success(res, { message: MESSAGES.PRODUCT_CREATED, data: { product }, statusCode: 201 });
 };
 
+/** PUT /api/v1/products/:id — Cập nhật sản phẩm */
 const updateProduct = async (req, res) => {
-  const product = await productService.updateProduct(req.params.id, req.body);
-  res.json({ success: true, message: 'Cập nhật sản phẩm thành công!', data: { product } });
+  const product = await productService.updateProduct(parseInt(req.params.id), req.body);
+  success(res, { message: MESSAGES.PRODUCT_UPDATED, data: { product } });
 };
 
+/** DELETE /api/v1/products/:id — Xóa / ẩn sản phẩm */
 const deleteProduct = async (req, res) => {
-  const result = await productService.deleteProduct(req.params.id);
-  res.json({ success: true, message: result.message, data: null });
+  const result = await productService.deleteProduct(parseInt(req.params.id));
+  success(res, { message: result.message, data: null });
 };
 
-module.exports = { getAllProducts, getProductById, getProductByBarcode, searchProducts, getExpiredProducts, getExpiringSoonProducts, createProduct, updateProduct, deleteProduct };
+module.exports = {
+  getAllProducts,
+  getProductById,
+  getProductByBarcode,
+  getProductBySku,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+};

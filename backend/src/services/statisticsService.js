@@ -1,3 +1,8 @@
+/**
+ * backend/src/services/statisticsService.js
+ * Business logic cho Thống kê & Báo cáo doanh thu, lợi nhuận, tồn kho
+ */
+
 const pool = require('../config/database');
 
 /** Dashboard tổng quan */
@@ -6,7 +11,7 @@ const getDashboard = async () => {
     SELECT
       COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() AND status='COMPLETED' THEN total_amount END), 0) AS today_revenue,
       COALESCE(COUNT(CASE WHEN DATE(created_at) = CURDATE() AND status='COMPLETED' THEN 1 END), 0) AS today_orders,
-      COALESCE(SUM(CASE WHEN DATE(created_at) = DATE_SUB(CURDATE(),INTERVAL 1 DAY) AND status='COMPLETED' THEN total_amount END), 0) AS yesterday_revenue
+      COALESCE(SUM(CASE WHEN DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND status='COMPLETED' THEN total_amount END), 0) AS yesterday_revenue
     FROM sales_orders`);
 
   const [[productStats]] = await pool.query(`
@@ -25,44 +30,43 @@ const getDashboard = async () => {
   return { ...todayStats, ...productStats, ...expiryStats };
 };
 
-/** Doanh thu theo ngày trong khoảng thời gian */
-const getDailyRevenue = async (fromDate, toDate) => {
+/**
+ * Báo cáo doanh thu theo ngày hoặc theo tháng
+ * @param {{ from_date, to_date, type }} options
+ */
+const getRevenue = async ({ from_date, to_date, type = 'daily' }) => {
+  const params = [];
+  let dateFilter = '';
+
+  if (from_date && to_date) {
+    dateFilter = 'AND DATE(created_at) BETWEEN ? AND ?';
+    params.push(from_date, to_date);
+  } else {
+    // Mặc định 30 ngày gần nhất
+    dateFilter = 'AND created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)';
+  }
+
+  if (type === 'monthly') {
+    const [rows] = await pool.query(`
+      SELECT DATE_FORMAT(created_at, '%Y-%m') AS period,
+             COUNT(*) AS order_count,
+             COALESCE(SUM(total_amount), 0) AS revenue
+      FROM sales_orders
+      WHERE status = 'COMPLETED' ${dateFilter}
+      GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+      ORDER BY period ASC`, params);
+    return rows;
+  }
+
+  // Mặc định daily
   const [rows] = await pool.query(`
     SELECT DATE(created_at) AS date,
            COUNT(*) AS order_count,
            COALESCE(SUM(total_amount), 0) AS revenue
     FROM sales_orders
-    WHERE status = 'COMPLETED' AND DATE(created_at) BETWEEN ? AND ?
+    WHERE status = 'COMPLETED' ${dateFilter}
     GROUP BY DATE(created_at)
-    ORDER BY date ASC`,
-    [fromDate, toDate]);
-  return rows;
-};
-
-/** Doanh thu 7 ngày gần nhất */
-const getWeeklyRevenue = async () => {
-  const [rows] = await pool.query(`
-    SELECT DATE(created_at) AS date,
-           COUNT(*) AS order_count,
-           COALESCE(SUM(total_amount), 0) AS revenue
-    FROM sales_orders
-    WHERE status = 'COMPLETED' AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-    GROUP BY DATE(created_at)
-    ORDER BY date ASC`);
-  return rows;
-};
-
-/** Doanh thu theo tháng trong năm */
-const getMonthlyRevenue = async (year) => {
-  const [rows] = await pool.query(`
-    SELECT MONTH(created_at) AS month, YEAR(created_at) AS year,
-           COUNT(*) AS order_count,
-           COALESCE(SUM(total_amount), 0) AS revenue
-    FROM sales_orders
-    WHERE status = 'COMPLETED' AND YEAR(created_at) = ?
-    GROUP BY MONTH(created_at)
-    ORDER BY month ASC`,
-    [year]);
+    ORDER BY date ASC`, params);
   return rows;
 };
 
@@ -90,4 +94,73 @@ const getTopProducts = async (fromDate, toDate, limit = 10) => {
   return rows;
 };
 
-module.exports = { getDashboard, getDailyRevenue, getWeeklyRevenue, getMonthlyRevenue, getTopProducts };
+/** Báo cáo tồn kho & cảnh báo */
+const getInventoryReport = async () => {
+  const [[summary]] = await pool.query(`
+    SELECT
+      COUNT(*) AS total_items,
+      SUM(stock_quantity) AS total_quantity,
+      SUM(stock_quantity * import_price) AS total_inventory_value,
+      SUM(CASE WHEN stock_quantity = 0 THEN 1 ELSE 0 END) AS out_of_stock_count,
+      SUM(CASE WHEN stock_quantity > 0 AND stock_quantity <= min_stock_level THEN 1 ELSE 0 END) AS low_stock_count
+    FROM products WHERE status = 'ACTIVE'`);
+
+  const [expiringBatches] = await pool.query(`
+    SELECT ib.id, p.name AS product_name, p.barcode, ib.quantity, ib.expiry_date,
+           DATEDIFF(ib.expiry_date, CURDATE()) AS days_remaining
+    FROM inventory_batches ib
+    JOIN products p ON ib.product_id = p.id
+    WHERE ib.status = 'ACTIVE' AND ib.quantity > 0
+      AND ib.expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+    ORDER BY ib.expiry_date ASC LIMIT 20`);
+
+  return {
+    summary,
+    expiring_soon_batches: expiringBatches,
+  };
+};
+
+/**
+ * Báo cáo lợi nhuận gộp (Doanh thu - Giá vốn hàng bán COGS)
+ * @param {string} fromDate
+ * @param {string} toDate
+ */
+const getProfitReport = async (fromDate, toDate) => {
+  const params = [];
+  let dateFilter = '';
+  if (fromDate && toDate) {
+    dateFilter = 'AND DATE(so.created_at) BETWEEN ? AND ?';
+    params.push(fromDate, toDate);
+  } else {
+    dateFilter = 'AND so.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)';
+  }
+
+  const [[metrics]] = await pool.query(`
+    SELECT
+      COALESCE(SUM(sod.subtotal), 0) AS total_revenue,
+      COALESCE(SUM(sod.quantity * p.import_price), 0) AS total_cogs,
+      COALESCE(SUM(sod.subtotal - (sod.quantity * p.import_price)), 0) AS gross_profit
+    FROM sales_order_details sod
+    JOIN products p ON sod.product_id = p.id
+    JOIN sales_orders so ON sod.order_id = so.id
+    WHERE so.status = 'COMPLETED' ${dateFilter}`, params);
+
+  const profitMargin = metrics.total_revenue > 0
+    ? ((metrics.gross_profit / metrics.total_revenue) * 100).toFixed(2)
+    : 0;
+
+  return {
+    total_revenue: metrics.total_revenue,
+    total_cogs: metrics.total_cogs,
+    gross_profit: metrics.gross_profit,
+    profit_margin_percent: parseFloat(profitMargin),
+  };
+};
+
+module.exports = {
+  getDashboard,
+  getRevenue,
+  getTopProducts,
+  getInventoryReport,
+  getProfitReport,
+};

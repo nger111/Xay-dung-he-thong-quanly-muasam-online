@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const categoryController = require('../controllers/categoryController');
 const { authenticate } = require('../middlewares/auth.middleware');
-const { requireAdmin } = require('../middlewares/role.middleware');
+const { requireAdmin, requireAdminOrManager, requireAuth } = require('../middlewares/role.middleware');
 
 /**
  * @swagger
@@ -21,8 +21,8 @@ const { requireAdmin } = require('../middlewares/role.middleware');
  *       200:
  *         description: Danh sách danh mục
  */
-router.get('/', authenticate, categoryController.getAllCategories);
-router.get('/:id', authenticate, categoryController.getCategoryById);
+router.get('/', authenticate, requireAuth, categoryController.getAllCategories);
+router.get('/:id', authenticate, requireAuth, categoryController.getCategoryById);
 
 /**
  * @swagger
@@ -47,8 +47,8 @@ router.get('/:id', authenticate, categoryController.getCategoryById);
  *       201:
  *         description: Tạo danh mục thành công
  */
-router.post('/', authenticate, requireAdmin, categoryController.createCategory);
-router.put('/:id', authenticate, requireAdmin, categoryController.updateCategory);
+router.post('/', authenticate, requireAdminOrManager, categoryController.createCategory);
+router.put('/:id', authenticate, requireAdminOrManager, categoryController.updateCategory);
 router.delete('/:id', authenticate, requireAdmin, categoryController.deleteCategory);
 
 module.exports = router;
