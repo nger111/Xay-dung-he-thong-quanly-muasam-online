@@ -4,10 +4,12 @@
  */
 
 const ROLES = {
-  ADMIN: 'ADMIN',       // Quản trị viên — toàn quyền
-  MANAGER: 'MANAGER',   // Nhân viên quản lý — quản lý sản phẩm, kho, nhập hàng
-  CASHIER: 'CASHIER',   // Thu ngân / Nhân viên bán hàng — POS, hóa đơn
-  CUSTOMER: 'CUSTOMER', // Khách hàng — Mobile App
+  ADMIN: 'ADMIN',           // Quản trị viên — toàn quyền
+  MANAGER: 'MANAGER',       // Nhân viên quản lý
+  CASHIER: 'CASHIER',       // Thu ngân / Nhân viên bán hàng
+  CUSTOMER: 'CUSTOMER',     // Khách hàng — Mobile App
+  CHU_QUAN: 'CHU_QUAN',     // Alias: Chủ quán (tương đương ADMIN)
+  NHAN_VIEN: 'NHAN_VIEN',   // Alias: Nhân viên (tương đương CASHIER)
 };
 
 module.exports = ROLES;

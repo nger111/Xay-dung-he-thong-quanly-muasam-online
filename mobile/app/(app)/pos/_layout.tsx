@@ -4,13 +4,11 @@ export default function PosLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: '#16a34a' },
-        headerTintColor: '#ffffff',
-        headerTitleStyle: { fontWeight: 'bold' },
+        headerShown: false,
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'Bán hàng (POS)' }} />
-      <Stack.Screen name="scanner" options={{ title: 'Quét mã vạch', presentation: 'modal' }} />
+      <Stack.Screen name="index" />
+      <Stack.Screen name="scanner" options={{ headerShown: true, title: 'Quét mã vạch', headerStyle: { backgroundColor: '#2563EB' }, headerTintColor: '#ffffff' }} />
     </Stack>
   );
 }

@@ -1,217 +1,369 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
-import { statisticsAPI } from '../../services/api';
+import { statisticsAPI, productsAPI } from '../../services/api';
+import { Colors } from '../../constants/colors';
 
-interface DashboardData {
+interface DashboardStats {
   today_revenue: number;
   today_orders: number;
   total_products: number;
   low_stock: number;
   out_of_stock: number;
-  expired_batches: number;
-  expiring_soon: number;
+  expired_batches?: number;
+  expiring_soon?: number;
 }
 
-const menuItems = [
-  { title: 'Bán hàng', icon: 'cart' as const, route: '/(app)/pos', color: '#f97316' },
-  { title: 'Sản phẩm', icon: 'cube' as const, route: '/(app)/products', color: '#3b82f6' },
-  { title: 'Tồn kho', icon: 'archive' as const, route: '/(app)/inventory', color: '#10b981' },
-  { title: 'Nhập hàng', icon: 'download' as const, route: '/(app)/imports', color: '#8b5cf6' },
-  { title: 'Báo cáo', icon: 'bar-chart' as const, route: '/(app)/statistics', color: '#14b8a6' },
-];
+interface ExpiringProduct {
+  id: string | number;
+  name: string;
+  barcode?: string;
+  expiry_date?: string;
+  stockQuantity?: number;
+  shelf_location?: string;
+  daysLeft?: number;
+}
+
+const fmt = (n: number) =>
+  new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n);
+
+const getDaysLeft = (dateStr?: string): number | null => {
+  if (!dateStr) return null;
+  const diff = new Date(dateStr).getTime() - Date.now();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+};
 
 export default function DashboardScreen() {
   const { user, logout } = useAuthStore();
-  const [stats, setStats] = useState<DashboardData | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [expiringProducts, setExpiringProducts] = useState<ExpiringProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
-      const res = await statisticsAPI.getDashboard();
-      setStats(res.data?.data ?? res.data);
+      const [statsRes, prodRes] = await Promise.allSettled([
+        statisticsAPI.getDashboard(),
+        productsAPI.getAll(),
+      ]);
+
+      if (statsRes.status === 'fulfilled') {
+        const d = statsRes.value.data?.data ?? statsRes.value.data ?? {};
+        setStats(d);
+      }
+
+      if (prodRes.status === 'fulfilled') {
+        const raw = prodRes.value.data?.data ?? prodRes.value.data ?? [];
+        const list: any[] = Array.isArray(raw) ? raw : (raw?.products ?? []);
+        // Lọc sản phẩm sắp hết hạn (trong 30 ngày)
+        const expiring = list
+          .filter((p: any) => {
+            const days = getDaysLeft(p.expiry_date);
+            return days !== null && days <= 30 && days >= 0;
+          })
+          .map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            barcode: p.barcode,
+            expiry_date: p.expiry_date,
+            stockQuantity: p.stockQuantity ?? p.stock_quantity ?? 0,
+            shelf_location: p.shelf_location ?? p.shelfLocation,
+            daysLeft: getDaysLeft(p.expiry_date) ?? 0,
+          }))
+          .sort((a, b) => (a.daysLeft ?? 0) - (b.daysLeft ?? 0));
+        setExpiringProducts(expiring);
+      }
     } catch {
-      // Stats not critical - show empty
+      // silent
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  }, []);
+
+  useEffect(() => { fetchData(); }, []);
+
+  const onRefresh = () => { setRefreshing(true); fetchData(); };
+
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Chào buổi sáng';
+    if (h < 18) return 'Chào buổi chiều';
+    return 'Chào buổi tối';
   };
 
-  const handleLogout = () => {
-    Alert.alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
-      { text: 'Huỷ', style: 'cancel' },
-      { text: 'Đăng xuất', style: 'destructive', onPress: logout },
-    ]);
-  };
+  const KPICard = ({
+    icon, label, value, color, bg, onPress,
+  }: {
+    icon: string; label: string; value: string | number; color: string; bg: string; onPress?: () => void;
+  }) => (
+    <TouchableOpacity style={[styles.kpiCard, { borderLeftColor: color }]} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}>
+      <View style={[styles.kpiIcon, { backgroundColor: bg }]}>
+        <Ionicons name={icon as any} size={22} color={color} />
+      </View>
+      <View style={styles.kpiInfo}>
+        <Text style={styles.kpiLabel}>{label}</Text>
+        <Text style={[styles.kpiValue, { color }]}>{value}</Text>
+      </View>
+    </TouchableOpacity>
+  );
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+    >
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Xin chào 👋</Text>
-          <Text style={styles.userName}>{user?.fullName ?? user?.username ?? 'Người dùng'}</Text>
+          <Text style={styles.greeting}>{greeting()} 👋</Text>
+          <Text style={styles.userName}>{user?.full_name ?? user?.username}</Text>
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleText}>{user?.role}</Text>
+          </View>
         </View>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <Ionicons name="log-out-outline" size={22} color="#dc2626" />
+        <TouchableOpacity onPress={() => logout()} style={styles.logoutBtn}>
+          <Ionicons name="log-out-outline" size={22} color={Colors.white} />
         </TouchableOpacity>
       </View>
 
-      {/* Stats Cards */}
-      <View style={styles.statsRow}>
-        <View style={[styles.statCard, { backgroundColor: '#dcfce7' }]}>
-          <Ionicons name="cash" size={24} color="#16a34a" />
-          <Text style={styles.statValue}>
-            {loading ? '...' : formatCurrency(stats?.today_revenue ?? 0)}
-          </Text>
-          <Text style={styles.statLabel}>Doanh thu hôm nay</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: '#dbeafe' }]}>
-          <Ionicons name="receipt" size={24} color="#2563eb" />
-          <Text style={styles.statValue}>{loading ? '...' : stats?.today_orders ?? 0}</Text>
-          <Text style={styles.statLabel}>Đơn hàng hôm nay</Text>
-        </View>
-      </View>
-
-      {loading ? null : (
-        <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: '#fef9c3' }]}>
-            <Ionicons name="warning" size={24} color="#ca8a04" />
-            <Text style={styles.statValue}>{stats?.low_stock ?? 0}</Text>
-            <Text style={styles.statLabel}>Sắp hết hàng</Text>
+      {/* Expiry Warning Banner */}
+      {expiringProducts.length > 0 && (
+        <TouchableOpacity
+          style={styles.warningBanner}
+          onPress={() => router.push('/(app)/products' as any)}
+        >
+          <View style={styles.warningIcon}>
+            <Ionicons name="warning" size={24} color={Colors.warning} />
           </View>
-          <View style={[styles.statCard, { backgroundColor: '#fee2e2' }]}>
-            <Ionicons name="close-circle" size={24} color="#dc2626" />
-            <Text style={styles.statValue}>{stats?.out_of_stock ?? 0}</Text>
-            <Text style={styles.statLabel}>Hết hàng</Text>
+          <View style={styles.warningContent}>
+            <Text style={styles.warningTitle}>
+              ⚠️ {expiringProducts.length} sản phẩm sắp hết hạn!
+            </Text>
+            <Text style={styles.warningText}>
+              {expiringProducts[0]?.name} — còn {expiringProducts[0]?.daysLeft} ngày
+            </Text>
           </View>
-        </View>
+          <Ionicons name="chevron-forward" size={16} color={Colors.warning} />
+        </TouchableOpacity>
       )}
 
-      {/* Menu Grid */}
-      <Text style={styles.sectionTitle}>Chức năng</Text>
-      <View style={styles.menuGrid}>
-        {menuItems.map((item) => (
-          <TouchableOpacity
-            key={item.title}
-            style={styles.menuItem}
-            onPress={() => router.push(item.route as any)}
-          >
-            <View style={[styles.menuIcon, { backgroundColor: item.color + '20' }]}>
-              <Ionicons name={item.icon} size={32} color={item.color} />
-            </View>
-            <Text style={styles.menuLabel}>{item.title}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* KPI Cards */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Hôm nay</Text>
+        <View style={styles.kpiGrid}>
+          <KPICard
+            icon="cash-outline"
+            label="Doanh thu"
+            value={fmt(stats?.today_revenue ?? 0)}
+            color={Colors.success}
+            bg={Colors.successLight}
+          />
+          <KPICard
+            icon="receipt-outline"
+            label="Đơn hàng"
+            value={stats?.today_orders ?? 0}
+            color={Colors.primary}
+            bg={Colors.primaryLight}
+          />
+          <KPICard
+            icon="cube-outline"
+            label="Tổng sản phẩm"
+            value={stats?.total_products ?? 0}
+            color={Colors.info}
+            bg={Colors.infoLight}
+            onPress={() => router.push('/(app)/products' as any)}
+          />
+          <KPICard
+            icon="alert-circle-outline"
+            label="Sắp hết hàng"
+            value={stats?.low_stock ?? 0}
+            color={Colors.warning}
+            bg={Colors.warningLight}
+            onPress={() => router.push('/(app)/inventory' as any)}
+          />
+          <KPICard
+            icon="close-circle-outline"
+            label="Hết hàng"
+            value={stats?.out_of_stock ?? 0}
+            color={Colors.error}
+            bg={Colors.errorLight}
+            onPress={() => router.push('/(app)/inventory' as any)}
+          />
+          <KPICard
+            icon="time-outline"
+            label="Sắp hết hạn"
+            value={expiringProducts.length}
+            color="#7C3AED"
+            bg="#F5F3FF"
+          />
+        </View>
       </View>
+
+      {/* Quick Actions */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Thao tác nhanh</Text>
+        <View style={styles.quickActions}>
+          {[
+            { icon: 'cart', label: 'Bán hàng', route: '/(app)/pos', color: Colors.primary },
+            { icon: 'add-circle', label: 'Thêm SP', route: '/(app)/products/add', color: Colors.success },
+            { icon: 'archive', label: 'Kho hàng', route: '/(app)/inventory', color: Colors.warning },
+            { icon: 'bar-chart', label: 'Báo cáo', route: '/(app)/statistics', color: '#7C3AED' },
+          ].map((action) => (
+            <TouchableOpacity
+              key={action.label}
+              style={[styles.quickAction, { borderTopColor: action.color }]}
+              onPress={() => router.push(action.route as any)}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: action.color + '18' }]}>
+                <Ionicons name={action.icon as any} size={26} color={action.color} />
+              </View>
+              <Text style={styles.quickActionLabel}>{action.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Expiring Products List */}
+      {expiringProducts.length > 0 && (
+        <View style={[styles.section, { paddingBottom: 30 }]}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Sản phẩm sắp hết hạn</Text>
+            <Text style={styles.sectionCount}>{expiringProducts.length}</Text>
+          </View>
+          {expiringProducts.slice(0, 5).map((p) => {
+            const isUrgent = (p.daysLeft ?? 0) <= 7;
+            return (
+              <View key={p.id} style={[styles.expiryCard, isUrgent && styles.expiryCardUrgent]}>
+                <View style={[styles.expiryDays, { backgroundColor: isUrgent ? Colors.errorLight : Colors.warningLight }]}>
+                  <Text style={[styles.expiryDaysNum, { color: isUrgent ? Colors.error : Colors.warning }]}>
+                    {p.daysLeft}
+                  </Text>
+                  <Text style={[styles.expiryDaysLabel, { color: isUrgent ? Colors.error : Colors.warning }]}>
+                    ngày
+                  </Text>
+                </View>
+                <View style={styles.expiryInfo}>
+                  <Text style={styles.expiryName} numberOfLines={1}>{p.name}</Text>
+                  {p.barcode ? (
+                    <Text style={styles.expiryBarcode}>Mã vạch: {p.barcode}</Text>
+                  ) : null}
+                  {p.shelf_location ? (
+                    <Text style={styles.expiryLocation}>
+                      <Ionicons name="location-outline" size={11} color={Colors.textSecondary} /> {p.shelf_location}
+                    </Text>
+                  ) : null}
+                  <Text style={styles.expiryDate}>
+                    HSD: {p.expiry_date ? new Date(p.expiry_date).toLocaleDateString('vi-VN') : 'Chưa có'}
+                  </Text>
+                </View>
+                {isUrgent && (
+                  <View style={styles.urgentBadge}>
+                    <Text style={styles.urgentText}>Gấp!</Text>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 16,
-    backgroundColor: '#16a34a',
+    backgroundColor: Colors.primary, paddingTop: 52, paddingHorizontal: 20,
+    paddingBottom: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
   },
-  greeting: {
-    fontSize: 14,
-    color: '#bbf7d0',
+  greeting: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginBottom: 2 },
+  userName: { fontSize: 22, fontWeight: '800', color: Colors.white, marginBottom: 6 },
+  roleBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 3, alignSelf: 'flex-start',
   },
-  userName: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
+  roleText: { fontSize: 11, color: Colors.white, fontWeight: '600' },
   logoutBtn: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 8,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center', marginTop: 4,
   },
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    gap: 12,
+  warningBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: Colors.warningLight, margin: 16, borderRadius: 12,
+    padding: 14, borderLeftWidth: 4, borderLeftColor: Colors.warning,
   },
-  statCard: {
-    flex: 1,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'flex-start',
+  warningIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#FDE68A', alignItems: 'center', justifyContent: 'center',
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginTop: 8,
-    marginBottom: 4,
+  warningContent: { flex: 1 },
+  warningTitle: { fontSize: 14, fontWeight: '700', color: '#92400E' },
+  warningText: { fontSize: 12, color: '#B45309', marginTop: 2 },
+  section: { paddingHorizontal: 16, marginTop: 20 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.text, marginBottom: 12 },
+  sectionCount: {
+    backgroundColor: Colors.primary, color: Colors.white,
+    fontSize: 12, fontWeight: '700', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
   },
-  statLabel: {
-    fontSize: 12,
-    color: '#6b7280',
+  kpiGrid: { gap: 10 },
+  kpiCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: Colors.white, borderRadius: 12, padding: 14,
+    borderLeftWidth: 4, shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 12,
+  kpiIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  kpiInfo: { flex: 1 },
+  kpiLabel: { fontSize: 12, color: Colors.textSecondary, marginBottom: 2 },
+  kpiValue: { fontSize: 18, fontWeight: '800' },
+  quickActions: { flexDirection: 'row', gap: 10 },
+  quickAction: {
+    flex: 1, backgroundColor: Colors.white, borderRadius: 12, padding: 14,
+    alignItems: 'center', borderTopWidth: 3,
+    shadowColor: Colors.shadow, shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
-  menuGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    gap: 12,
-    paddingBottom: 32,
+  quickActionIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  quickActionLabel: { fontSize: 11, fontWeight: '600', color: Colors.text, textAlign: 'center' },
+  expiryCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: Colors.white, borderRadius: 12, padding: 12, marginBottom: 8,
+    borderLeftWidth: 3, borderLeftColor: Colors.warning,
+    shadowColor: Colors.shadow, shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
-  menuItem: {
-    width: '47%',
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+  expiryCardUrgent: { borderLeftColor: Colors.error },
+  expiryDays: {
+    width: 52, height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
   },
-  menuIcon: {
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 12,
+  expiryDaysNum: { fontSize: 20, fontWeight: '800', lineHeight: 22 },
+  expiryDaysLabel: { fontSize: 10, fontWeight: '600' },
+  expiryInfo: { flex: 1 },
+  expiryName: { fontSize: 14, fontWeight: '600', color: Colors.text },
+  expiryBarcode: { fontSize: 11, color: Colors.textSecondary, marginTop: 1 },
+  expiryLocation: { fontSize: 11, color: Colors.textSecondary, marginTop: 1 },
+  expiryDate: { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+  urgentBadge: {
+    backgroundColor: Colors.errorLight, borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 4,
   },
-  menuLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    textAlign: 'center',
-  },
+  urgentText: { fontSize: 11, fontWeight: '700', color: Colors.error },
 });

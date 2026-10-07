@@ -1,45 +1,31 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../constants/colors';
 
 export default function AppLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#16a34a',
-        tabBarInactiveTintColor: '#9ca3af',
+        tabBarActiveTintColor: Colors.primary,
+        tabBarInactiveTintColor: '#94A3B8',
         tabBarStyle: {
-          backgroundColor: '#ffffff',
+          backgroundColor: Colors.white,
           borderTopWidth: 1,
-          borderTopColor: '#e5e7eb',
+          borderTopColor: Colors.border,
           paddingBottom: 6,
           paddingTop: 6,
-          height: 60,
+          height: 64,
         },
-        headerStyle: {
-          backgroundColor: '#16a34a',
-        },
-        headerTintColor: '#ffffff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        headerShown: false,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Trang chủ',
+          title: 'Tổng quan',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="pos"
-        options={{
-          title: 'Bán hàng',
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cart" size={size} color={color} />
+            <Ionicons name="grid-outline" size={size} color={color} />
           ),
         }}
       />
@@ -47,39 +33,41 @@ export default function AppLayout() {
         name="products"
         options={{
           title: 'Sản phẩm',
-          headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cube" size={size} color={color} />
+            <Ionicons name="cube-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="pos"
+        options={{
+          title: 'Bán hàng',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="cart-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="inventory"
         options={{
-          title: 'Kho',
+          title: 'Kho hàng',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="archive" size={size} color={color} />
+            <Ionicons name="archive-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="statistics"
         options={{
-          title: 'Thống kê',
+          title: 'Báo cáo',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bar-chart" size={size} color={color} />
+            <Ionicons name="bar-chart-outline" size={size} color={color} />
           ),
         }}
       />
-      <Tabs.Screen
-        name="imports"
-        options={{
-          title: 'Nhập hàng',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="download" size={size} color={color} />
-          ),
-        }}
-      />
+      {/* Hidden screens from tab bar */}
+      <Tabs.Screen name="category" options={{ href: null }} />
+      <Tabs.Screen name="imports" options={{ href: null }} />
     </Tabs>
   );
 }

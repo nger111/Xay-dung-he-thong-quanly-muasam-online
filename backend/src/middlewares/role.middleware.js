@@ -50,20 +50,20 @@ const authorize = (...allowedRoles) => {
 
 // ========== Shorthand middlewares hay dùng ==========
 
-/** Chỉ Admin */
-const requireAdmin = authorize(ROLES.ADMIN);
+/** Chỉ Admin (bao gồm CHU_QUAN) */
+const requireAdmin = authorize(ROLES.ADMIN, ROLES.CHU_QUAN);
 
-/** Admin hoặc Manager */
-const requireAdminOrManager = authorize(ROLES.ADMIN, ROLES.MANAGER);
+/** Admin hoặc Manager (bao gồm CHU_QUAN) */
+const requireAdminOrManager = authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.CHU_QUAN);
 
-/** Admin, Manager hoặc Cashier (nhân viên nội bộ) */
-const requireStaff = authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.CASHIER);
+/** Admin, Manager hoặc Cashier — nhân viên nội bộ (bao gồm CHU_QUAN, NHAN_VIEN) */
+const requireStaff = authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.CASHIER, ROLES.CHU_QUAN, ROLES.NHAN_VIEN);
 
 /** Chỉ Customer (Mobile App) */
 const requireCustomer = authorize(ROLES.CUSTOMER);
 
-/** Tất cả user đã đăng nhập (bao gồm cả Customer) */
-const requireAuth = authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.CASHIER, ROLES.CUSTOMER);
+/** Tất cả user đã đăng nhập */
+const requireAuth = authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.CASHIER, ROLES.CUSTOMER, ROLES.CHU_QUAN, ROLES.NHAN_VIEN);
 
 module.exports = {
   authorize,

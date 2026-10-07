@@ -1,18 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-  TextInput,
-  Modal,
+  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  RefreshControl, ActivityIndicator, Alert, TextInput, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { inventoryAPI } from '../../services/api';
+import { Colors } from '../../constants/colors';
 
 type FilterType = 'all' | 'low' | 'out';
 
@@ -77,23 +70,33 @@ export default function InventoryScreen() {
       setAdjustItem(null);
       setNewStockInput('');
       fetchInventory(filter);
+      Alert.alert('✅ Thành công', 'Đã cập nhật tồn kho');
     } catch {
       Alert.alert('Lỗi', 'Không thể cập nhật tồn kho');
     }
   };
 
   const getStockStyle = (stock: number) => {
-    if (stock <= 0) return { bg: '#fee2e2', text: '#dc2626' };
-    if (stock < 10) return { bg: '#fef3c7', text: '#d97706' };
-    return { bg: '#dcfce7', text: '#16a34a' };
+    if (stock <= 0) return { bg: Colors.errorLight, text: Colors.error };
+    if (stock < 10) return { bg: Colors.warningLight, text: Colors.warning };
+    return { bg: Colors.successLight, text: Colors.success };
   };
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#16a34a" /></View>;
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
   }
 
   return (
     <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Quản lý tồn kho</Text>
+      </View>
+
       {/* Tabs */}
       <View style={styles.tabs}>
         {TABS.map((tab) => (
@@ -116,12 +119,12 @@ export default function InventoryScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => { setRefreshing(true); fetchInventory(filter); }}
-            colors={['#16a34a']}
+            tintColor={Colors.primary}
           />
         }
         ListEmptyComponent={
           <View style={styles.center}>
-            <Ionicons name="archive-outline" size={48} color="#d1d5db" />
+            <Ionicons name="archive-outline" size={48} color={Colors.placeholder} />
             <Text style={styles.emptyText}>Không có dữ liệu tồn kho</Text>
           </View>
         }
@@ -135,7 +138,7 @@ export default function InventoryScreen() {
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName} numberOfLines={1}>{item.productName}</Text>
                 <Text style={styles.itemLocation}>
-                  <Ionicons name="location-outline" size={12} color="#9ca3af" /> {item.shelfLocation}
+                  <Ionicons name="location-outline" size={12} color={Colors.textSecondary} /> {item.shelfLocation}
                 </Text>
               </View>
               <View style={[styles.stockBadge, { backgroundColor: stockStyle.bg }]}>
@@ -143,10 +146,11 @@ export default function InventoryScreen() {
                   SL: {item.currentStock}
                 </Text>
               </View>
-              <Ionicons name="create-outline" size={18} color="#6b7280" />
+              <Ionicons name="create-outline" size={18} color={Colors.textSecondary} />
             </TouchableOpacity>
           );
         }}
+        contentContainerStyle={items.length === 0 ? { flex: 1 } : { paddingBottom: 40 }}
       />
 
       {/* Adjust Modal */}
@@ -161,6 +165,7 @@ export default function InventoryScreen() {
               onChangeText={setNewStockInput}
               keyboardType="numeric"
               placeholder="Nhập số lượng mới"
+              autoFocus
             />
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -181,88 +186,54 @@ export default function InventoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
+  container: { flex: 1, backgroundColor: Colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 32 },
+  header: {
+    backgroundColor: Colors.primary, paddingTop: 52, paddingBottom: 16,
+    paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: Colors.white },
   tabs: {
-    flexDirection: 'row',
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    flexDirection: 'row', backgroundColor: Colors.white,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   tab: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    flex: 1, paddingVertical: 14, alignItems: 'center',
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
   },
-  tabActive: { borderBottomColor: '#16a34a' },
-  tabText: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
-  tabTextActive: { color: '#16a34a', fontWeight: 'bold' },
+  tabActive: { borderBottomColor: Colors.primary },
+  tabText: { fontSize: 14, color: Colors.textSecondary, fontWeight: '500' },
+  tabTextActive: { color: Colors.primary, fontWeight: '700' },
   itemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    marginHorizontal: 12,
-    marginVertical: 4,
-    borderRadius: 10,
-    padding: 12,
-    gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white,
+    marginHorizontal: 12, marginVertical: 4, borderRadius: 12, padding: 14, gap: 10,
+    shadowColor: Colors.shadow, shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
   itemInfo: { flex: 1 },
-  itemName: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  itemLocation: { fontSize: 12, color: '#9ca3af', marginTop: 4 },
-  stockBadge: {
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  stockText: { fontSize: 13, fontWeight: 'bold' },
-  emptyText: { fontSize: 15, color: '#9ca3af' },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  modalBox: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    gap: 12,
-  },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
-  modalProduct: { fontSize: 15, color: '#6b7280' },
+  itemName: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  itemLocation: { fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
+  stockBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  stockText: { fontSize: 13, fontWeight: '700' },
+  emptyText: { fontSize: 15, color: Colors.textSecondary },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalBox: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: Colors.text },
+  modalProduct: { fontSize: 14, color: Colors.textSecondary },
   modalInput: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#111827',
+    borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: Colors.text,
+    backgroundColor: Colors.background,
   },
-  modalActions: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
   modalCancelBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
+    flex: 1, borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12,
+    paddingVertical: 13, alignItems: 'center',
   },
-  modalCancelText: { color: '#374151', fontWeight: '600' },
+  modalCancelText: { color: Colors.textSecondary, fontWeight: '700' },
   modalSaveBtn: {
-    flex: 1,
-    backgroundColor: '#16a34a',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
+    flex: 1, backgroundColor: Colors.primary, borderRadius: 12,
+    paddingVertical: 13, alignItems: 'center',
   },
-  modalSaveText: { color: '#ffffff', fontWeight: 'bold' },
+  modalSaveText: { color: Colors.white, fontWeight: '700' },
 });

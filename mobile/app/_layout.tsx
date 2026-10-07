@@ -1,37 +1,31 @@
 import { useEffect } from 'react';
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '../store/authStore';
-import { View, ActivityIndicator } from 'react-native';
+import { useRouter, useSegments } from 'expo-router';
 
 export default function RootLayout() {
   const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
+  const router = useRouter();
+  const segments = useSegments();
 
   useEffect(() => {
     checkAuth();
   }, []);
 
-  // Điều hướng khi auth state thay đổi
   useEffect(() => {
     if (isLoading) return;
-    if (isAuthenticated) {
-      router.replace('/(app)');
-    } else {
+    const inAuthGroup = segments[0] === '(auth)';
+    if (!isAuthenticated && !inAuthGroup) {
       router.replace('/(auth)/login');
+    } else if (isAuthenticated && inAuthGroup) {
+      router.replace('/(app)');
     }
-  }, [isAuthenticated, isLoading]);
-
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#16a34a' }}>
-        <ActivityIndicator size="large" color="#ffffff" />
-      </View>
-    );
-  }
+  }, [isAuthenticated, isLoading, segments]);
 
   return (
     <>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(app)" />

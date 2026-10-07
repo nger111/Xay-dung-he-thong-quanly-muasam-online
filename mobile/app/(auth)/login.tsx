@@ -1,21 +1,16 @@
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
+import { Colors } from '../../constants/colors';
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { login, isLoading, error, clearError } = useAuthStore();
 
   const handleLogin = async () => {
@@ -26,8 +21,7 @@ export default function LoginScreen() {
     clearError();
     const success = await login(username.trim(), password.trim());
     if (!success) {
-      const msg = useAuthStore.getState().error || 'Đăng nhập thất bại';
-      Alert.alert('Lỗi đăng nhập', msg);
+      Alert.alert('Đăng nhập thất bại', useAuthStore.getState().error || 'Vui lòng thử lại');
     }
   };
 
@@ -36,52 +30,93 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.emoji}>🛒</Text>
-          <Text style={styles.title}>Quản Lý Tạp Hoá</Text>
-          <Text style={styles.subtitle}>Đăng nhập để tiếp tục</Text>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        {/* Brand */}
+        <View style={styles.brand}>
+          <View style={styles.logoCircle}>
+            <Ionicons name="storefront" size={40} color={Colors.white} />
+          </View>
+          <Text style={styles.appName}>Quản Lý Cửa Hàng</Text>
+          <Text style={styles.appSub}>Hệ thống quản lý bán lẻ thông minh</Text>
         </View>
 
         {/* Form */}
-        <View style={styles.form}>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Đăng nhập</Text>
+          <Text style={styles.cardSub}>Nhập thông tin tài khoản của bạn</Text>
+
+          {/* Error */}
+          {error ? (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle-outline" size={16} color={Colors.error} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          {/* Username */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Tên đăng nhập</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Nhập tên đăng nhập"
-              placeholderTextColor="#9ca3af"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+            <View style={styles.inputRow}>
+              <Ionicons name="person-outline" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Nhập tên đăng nhập"
+                placeholderTextColor={Colors.placeholder}
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+            </View>
           </View>
 
+          {/* Password */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Mật khẩu</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Nhập mật khẩu"
-              placeholderTextColor="#9ca3af"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <View style={styles.inputRow}>
+              <Ionicons name="lock-closed-outline" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Nhập mật khẩu"
+                placeholderTextColor={Colors.placeholder}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={18}
+                  color={Colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
 
+          {/* Login Button */}
           <TouchableOpacity
-            style={[styles.button, isLoading && styles.buttonDisabled]}
+            style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
             onPress={handleLogin}
             disabled={isLoading}
+            activeOpacity={0.85}
           >
             {isLoading ? (
-              <ActivityIndicator color="#ffffff" />
+              <ActivityIndicator color={Colors.white} />
             ) : (
-              <Text style={styles.buttonText}>Đăng nhập</Text>
+              <>
+                <Ionicons name="log-in-outline" size={20} color={Colors.white} />
+                <Text style={styles.loginBtnText}>Đăng nhập</Text>
+              </>
             )}
           </TouchableOpacity>
+
+          {/* Demo hint */}
+          <View style={styles.demoHint}>
+            <Text style={styles.demoText}>Demo: admin / 123456</Text>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -89,75 +124,46 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f0fdf4',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  emoji: {
-    fontSize: 64,
+  container: { flex: 1, backgroundColor: Colors.primary },
+  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  brand: { alignItems: 'center', marginBottom: 32 },
+  logoCircle: {
+    width: 80, height: 80, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center', justifyContent: 'center',
     marginBottom: 16,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#15803d',
-    marginBottom: 8,
+  appName: { fontSize: 26, fontWeight: '800', color: Colors.white, marginBottom: 6 },
+  appSub: { fontSize: 13, color: 'rgba(255,255,255,0.75)', textAlign: 'center' },
+  card: {
+    backgroundColor: Colors.white, borderRadius: 20, padding: 24,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
+  cardTitle: { fontSize: 20, fontWeight: '700', color: Colors.text, marginBottom: 4 },
+  cardSub: { fontSize: 13, color: Colors.textSecondary, marginBottom: 20 },
+  errorBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.errorLight, borderRadius: 10, padding: 12, marginBottom: 16,
   },
-  form: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  errorText: { fontSize: 13, color: Colors.error, flex: 1 },
+  inputGroup: { marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '600', color: Colors.text, marginBottom: 8 },
+  inputRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12,
+    backgroundColor: Colors.background, paddingHorizontal: 12,
   },
-  inputGroup: {
-    marginBottom: 20,
+  inputIcon: { marginRight: 8 },
+  input: { flex: 1, fontSize: 15, color: Colors.text, paddingVertical: 13 },
+  eyeBtn: { padding: 4 },
+  loginBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 15,
+    marginTop: 8, gap: 8,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#111827',
-    backgroundColor: '#f9fafb',
-  },
-  button: {
-    backgroundColor: '#16a34a',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    backgroundColor: '#86efac',
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  loginBtnDisabled: { backgroundColor: '#93C5FD' },
+  loginBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
+  demoHint: { alignItems: 'center', marginTop: 16 },
+  demoText: { fontSize: 12, color: Colors.placeholder },
 });

@@ -3,10 +3,12 @@ import * as SecureStore from 'expo-secure-store';
 import { authAPI, TOKEN_KEY } from '../services/api';
 
 export interface User {
-  id: string;
+  id: number;
   username: string;
-  fullName: string;
+  full_name: string;
+  email: string;
   role: string;
+  phone?: string;
 }
 
 interface AuthState {
@@ -15,7 +17,6 @@ interface AuthState {
   token: string | null;
   isLoading: boolean;
   error: string | null;
-
   checkAuth: () => Promise<void>;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -29,7 +30,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: false,
   error: null,
 
-  // Kiểm tra token lưu sẵn khi khởi động app
   checkAuth: async () => {
     set({ isLoading: true });
     try {
@@ -44,43 +44,29 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  // Gọi API đăng nhập
   login: async (username: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
       const response = await authAPI.login(username, password);
-      const { token, user } = response.data;
-
+      // Backend: { success, message, data: { token, user } }
+      const { token, user } = response.data?.data || {};
       if (token) {
         await SecureStore.setItemAsync(TOKEN_KEY, token);
-        set({
-          isAuthenticated: true,
-          token,
-          user,
-          isLoading: false,
-          error: null,
-        });
+        set({ isAuthenticated: true, token, user, isLoading: false, error: null });
         return true;
       }
       set({ isLoading: false, error: 'Đăng nhập thất bại' });
       return false;
-    } catch (error: any) {
-      const msg =
-        error?.response?.data?.message || 'Tên đăng nhập hoặc mật khẩu sai';
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Tên đăng nhập hoặc mật khẩu không đúng';
       set({ isLoading: false, error: msg, isAuthenticated: false });
       return false;
     }
   },
 
-  // Đăng xuất và xoá token
   logout: async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
-    set({
-      isAuthenticated: false,
-      user: null,
-      token: null,
-      error: null,
-    });
+    set({ isAuthenticated: false, user: null, token: null, error: null });
   },
 
   clearError: () => set({ error: null }),

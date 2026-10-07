@@ -305,12 +305,11 @@ CREATE TABLE payments (
 -- ============================================================
 
 -- Tài khoản Admin mặc định
--- Username: admin | Password: Admin@123
--- (hash của 'Admin@123' bằng bcrypt rounds=10)
+-- Username: admin | Password: 123456
 INSERT INTO users (username, password_hash, full_name, phone, email, role) VALUES
 (
     'admin',
-    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', -- password: password
+    '$2a$10$kHarNOmEMivOnNK93ZwghOXbTxyM76o4SXFCAnp9XtE.qWEzSYf02', -- password: 123456
     'Quản Trị Viên (Admin)',
     '0901234567',
     'admin@taphoavinh.com',
@@ -318,7 +317,7 @@ INSERT INTO users (username, password_hash, full_name, phone, email, role) VALUE
 ),
 (
     'manager1',
-    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    '$2a$10$kHarNOmEMivOnNK93ZwghOXbTxyM76o4SXFCAnp9XtE.qWEzSYf02', -- password: 123456
     'Quản Lý Cửa Hàng',
     '0901234568',
     'manager@taphoavinh.com',
@@ -326,7 +325,7 @@ INSERT INTO users (username, password_hash, full_name, phone, email, role) VALUE
 ),
 (
     'cashier1',
-    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    '$2a$10$kHarNOmEMivOnNK93ZwghOXbTxyM76o4SXFCAnp9XtE.qWEzSYf02', -- password: 123456
     'Thu Ngân 01',
     '0901234569',
     'cashier@taphoavinh.com',
@@ -334,7 +333,7 @@ INSERT INTO users (username, password_hash, full_name, phone, email, role) VALUE
 ),
 (
     'customer1',
-    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    '$2a$10$kHarNOmEMivOnNK93ZwghOXbTxyM76o4SXFCAnp9XtE.qWEzSYf02', -- password: 123456
     'Khách Hàng Thân Thiết',
     '0909999888',
     'customer@taphoavinh.com',
