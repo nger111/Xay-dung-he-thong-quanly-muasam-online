@@ -1,14 +1,16 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
-import { authAPI, TOKEN_KEY } from '../services/api';
+import { storage } from '../services/storage';
+import { authAPI, TOKEN_KEY, unwrapData } from '../services/api';
+import { useCartStore } from './cartStore';
 
 export interface User {
-  id: number;
+  id: string;
   username: string;
   full_name: string;
+  fullName: string;
   email: string;
+  phone: string;
   role: string;
-  phone?: string;
 }
 
 interface AuthState {
@@ -18,56 +20,101 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   checkAuth: () => Promise<void>;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (identifier: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  updateUser: (user: User) => void;
   clearError: () => void;
 }
+
+const normalizeUser = (value: unknown): User => {
+  const raw = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  return {
+    id: String(raw.id ?? ''),
+    username: String(raw.username ?? ''),
+    full_name: String(raw.full_name ?? raw.fullName ?? ''),
+    fullName: String(raw.full_name ?? raw.fullName ?? ''),
+    email: String(raw.email ?? ''),
+    phone: String(raw.phone ?? ''),
+    role: String(raw.role ?? '').toUpperCase(),
+  };
+};
+
+const readUser = (response: unknown): User =>
+  normalizeUser(unwrapData<{ user?: unknown }>(response).user ?? unwrapData(response));
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  const response = (error as { response?: { data?: { message?: string } } })?.response;
+  return response?.data?.message || fallback;
+};
 
 export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   user: null,
   token: null,
-  isLoading: false,
+  isLoading: true,
   error: null,
 
   checkAuth: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
-      const token = await SecureStore.getItemAsync(TOKEN_KEY);
-      if (token) {
-        set({ isAuthenticated: true, token, isLoading: false, error: null });
-      } else {
-        set({ isAuthenticated: false, isLoading: false });
+      const token = await storage.getItem(TOKEN_KEY);
+      if (!token) {
+        set({ isAuthenticated: false, user: null, token: null, isLoading: false });
+        return;
       }
-    } catch {
-      set({ isAuthenticated: false, isLoading: false });
+
+      const response = await authAPI.me();
+      const user = readUser(response.data);
+      set({ isAuthenticated: true, user, token, isLoading: false });
+    } catch (error) {
+      await storage.deleteItem(TOKEN_KEY);
+      set({
+        isAuthenticated: false,
+        user: null,
+        token: null,
+        isLoading: false,
+        error: getErrorMessage(error, 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'),
+      });
     }
   },
 
-  login: async (username: string, password: string) => {
+  login: async (identifier, password) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await authAPI.login(username, password);
-      // Backend: { success, message, data: { token, user } }
-      const { token, user } = response.data?.data || {};
-      if (token) {
-        await SecureStore.setItemAsync(TOKEN_KEY, token);
-        set({ isAuthenticated: true, token, user, isLoading: false, error: null });
-        return true;
+      const response = await authAPI.login(identifier, password);
+      const payload = unwrapData<{ token?: string; user?: unknown }>(response.data);
+      const token = payload.token;
+      const user = normalizeUser(payload.user);
+
+      if (!token || !user.id) {
+        set({ isLoading: false, error: 'Máy chủ trả về dữ liệu đăng nhập không hợp lệ.' });
+        return false;
       }
-      set({ isLoading: false, error: 'Đăng nhập thất bại' });
-      return false;
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Tên đăng nhập hoặc mật khẩu không đúng';
-      set({ isLoading: false, error: msg, isAuthenticated: false });
+
+      await storage.setItem(TOKEN_KEY, token);
+      set({ isAuthenticated: true, token, user, isLoading: false, error: null });
+      return true;
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: getErrorMessage(error, 'Không thể đăng nhập. Vui lòng thử lại.'),
+        isAuthenticated: false,
+      });
       return false;
     }
   },
 
   logout: async () => {
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    set({ isAuthenticated: false, user: null, token: null, error: null });
+    await storage.deleteItem(TOKEN_KEY);
+    useCartStore.getState().clearCart();
+    set({
+      isAuthenticated: false,
+      user: null,
+      token: null,
+      error: null,
+    });
   },
 
+  updateUser: (user) => set({ user }),
   clearError: () => set({ error: null }),
 }));

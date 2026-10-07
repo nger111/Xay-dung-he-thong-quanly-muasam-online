@@ -61,10 +61,20 @@ const adjustInventory = async (req, res) => {
   });
 };
 
+/** GET /api/v1/inventory/batches — Danh sách chi tiết các lô hàng theo SQL inventory_batches */
+const getAllBatches = async (req, res) => {
+  const batches = await inventoryService.getAllBatches(req.query);
+  success(res, {
+    message: 'Lấy danh sách lô hàng thành công',
+    data: { batches, total: batches.length },
+  });
+};
+
 module.exports = {
   getAllInventory,
   getProductInventory,
   getLowStock,
   getOutOfStock,
   adjustInventory,
+  getAllBatches,
 };

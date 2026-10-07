@@ -10,8 +10,8 @@ export default function RootLayout() {
   const segments = useSegments();
 
   useEffect(() => {
-    checkAuth();
-  }, []);
+    void checkAuth();
+  }, [checkAuth]);
 
   useEffect(() => {
     if (isLoading) return;

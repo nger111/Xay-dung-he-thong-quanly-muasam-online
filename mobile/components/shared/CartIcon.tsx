@@ -6,7 +6,9 @@ import { Colors } from '../../constants/colors';
 import { useCartStore } from '../../store/cartStore';
 
 export function CartIcon() {
-  const totalItems = useCartStore((s) => s.totalItems);
+  const totalItems = useCartStore((s) =>
+    s.items.reduce((total, item) => total + item.quantity, 0)
+  );
 
   return (
     <TouchableOpacity

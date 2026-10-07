@@ -1,28 +1,31 @@
 import { useState } from 'react';
+import { router } from 'expo-router';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
-import { Colors } from '../../constants/colors';
+import { routes } from '../../utils/routes';
 
 export default function LoginScreen() {
-  const [username, setUsername] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const { login, isLoading, error, clearError } = useAuthStore();
 
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu');
+    if (!identifier.trim() || !password) {
       return;
     }
     clearError();
-    const success = await login(username.trim(), password.trim());
-    if (!success) {
-      Alert.alert('Đăng nhập thất bại', useAuthStore.getState().error || 'Vui lòng thử lại');
-    }
+    await login(identifier.trim(), password);
   };
 
   return (
@@ -30,92 +33,64 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {/* Brand */}
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.brand}>
-          <View style={styles.logoCircle}>
-            <Ionicons name="storefront" size={40} color={Colors.white} />
+          <View style={styles.logo}>
+            <Ionicons name="bag-handle" size={32} color="#ffffff" />
           </View>
-          <Text style={styles.appName}>Quản Lý Cửa Hàng</Text>
-          <Text style={styles.appSub}>Hệ thống quản lý bán lẻ thông minh</Text>
+          <Text style={styles.title}>Mua sắm tiện lợi</Text>
+          <Text style={styles.subtitle}>Đăng nhập để khám phá sản phẩm</Text>
         </View>
 
-        {/* Form */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Đăng nhập</Text>
-          <Text style={styles.cardSub}>Nhập thông tin tài khoản của bạn</Text>
+        <View style={styles.form}>
+          <Text style={styles.heading}>Chào mừng bạn</Text>
+          <Text style={styles.description}>Đăng nhập bằng tài khoản của bạn</Text>
 
-          {/* Error */}
-          {error ? (
-            <View style={styles.errorBox}>
-              <Ionicons name="alert-circle-outline" size={16} color={Colors.error} />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
+          <Text style={styles.label}>Email hoặc tên đăng nhập</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="name@example.com"
+            placeholderTextColor="#9ca3af"
+            value={identifier}
+            onChangeText={setIdentifier}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            returnKeyType="next"
+          />
 
-          {/* Username */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Tên đăng nhập</Text>
-            <View style={styles.inputRow}>
-              <Ionicons name="person-outline" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Nhập tên đăng nhập"
-                placeholderTextColor={Colors.placeholder}
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="next"
-              />
-            </View>
-          </View>
+          <Text style={styles.label}>Mật khẩu</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Nhập mật khẩu"
+            placeholderTextColor="#9ca3af"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            onSubmitEditing={handleLogin}
+            returnKeyType="done"
+          />
 
-          {/* Password */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Mật khẩu</Text>
-            <View style={styles.inputRow}>
-              <Ionicons name="lock-closed-outline" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                placeholder="Nhập mật khẩu"
-                placeholderTextColor={Colors.placeholder}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                returnKeyType="done"
-                onSubmitEditing={handleLogin}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={18}
-                  color={Colors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          {/* Login Button */}
           <TouchableOpacity
-            style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
+            style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={isLoading}
-            activeOpacity={0.85}
+            accessibilityRole="button"
           >
             {isLoading ? (
-              <ActivityIndicator color={Colors.white} />
+              <ActivityIndicator color="#ffffff" />
             ) : (
-              <>
-                <Ionicons name="log-in-outline" size={20} color={Colors.white} />
-                <Text style={styles.loginBtnText}>Đăng nhập</Text>
-              </>
+              <Text style={styles.buttonText}>Đăng nhập</Text>
             )}
           </TouchableOpacity>
 
-          {/* Demo hint */}
-          <View style={styles.demoHint}>
-            <Text style={styles.demoText}>Demo: admin / 123456</Text>
+          <View style={styles.registerRow}>
+            <Text style={styles.registerPrompt}>Bạn chưa có tài khoản? </Text>
+            <TouchableOpacity onPress={() => router.push(routes.register)}>
+              <Text style={styles.registerLink}>Đăng ký</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -124,46 +99,55 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  brand: { alignItems: 'center', marginBottom: 32 },
-  logoCircle: {
-    width: 80, height: 80, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 16,
+  container: { flex: 1, backgroundColor: '#f0fdfa' },
+  content: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  brand: { alignItems: 'center', marginBottom: 28 },
+  logo: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    backgroundColor: '#0f766e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
   },
-  appName: { fontSize: 26, fontWeight: '800', color: Colors.white, marginBottom: 6 },
-  appSub: { fontSize: 13, color: 'rgba(255,255,255,0.75)', textAlign: 'center' },
-  card: {
-    backgroundColor: Colors.white, borderRadius: 20, padding: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
+  title: { fontSize: 26, fontWeight: '800', color: '#134e4a' },
+  subtitle: { marginTop: 6, color: '#64748b', fontSize: 15 },
+  form: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 22,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  cardTitle: { fontSize: 20, fontWeight: '700', color: Colors.text, marginBottom: 4 },
-  cardSub: { fontSize: 13, color: Colors.textSecondary, marginBottom: 20 },
-  errorBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.errorLight, borderRadius: 10, padding: 12, marginBottom: 16,
+  heading: { fontSize: 21, fontWeight: '700', color: '#111827' },
+  description: { color: '#6b7280', marginTop: 4, marginBottom: 22 },
+  label: { color: '#374151', fontWeight: '600', marginBottom: 7, marginTop: 12 },
+  input: {
+    borderWidth: 1,
+    borderColor: '#dbe3e8',
+    backgroundColor: '#f8fafc',
+    borderRadius: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    color: '#111827',
+    fontSize: 15,
   },
-  errorText: { fontSize: 13, color: Colors.error, flex: 1 },
-  inputGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: Colors.text, marginBottom: 8 },
-  inputRow: {
-    flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12,
-    backgroundColor: Colors.background, paddingHorizontal: 12,
+  error: { marginTop: 12, color: '#dc2626', fontSize: 14 },
+  button: {
+    backgroundColor: '#0f766e',
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    marginTop: 22,
   },
-  inputIcon: { marginRight: 8 },
-  input: { flex: 1, fontSize: 15, color: Colors.text, paddingVertical: 13 },
-  eyeBtn: { padding: 4 },
-  loginBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 15,
-    marginTop: 8, gap: 8,
-  },
-  loginBtnDisabled: { backgroundColor: '#93C5FD' },
-  loginBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
-  demoHint: { alignItems: 'center', marginTop: 16 },
-  demoText: { fontSize: 12, color: Colors.placeholder },
+  buttonDisabled: { opacity: 0.65 },
+  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
+  registerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 18 },
+  registerPrompt: { color: '#64748b' },
+  registerLink: { color: '#0f766e', fontWeight: '700' },
 });

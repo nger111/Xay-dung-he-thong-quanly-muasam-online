@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useCart } from '../../hooks/useCart';
+import type { CartProduct } from '../../store/cartStore';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
@@ -52,13 +53,16 @@ export function ProductCard({ product }: ProductCardProps) {
 
   const handleAddToCart = () => {
     if (!inStock) return;
-    addItem({
-      productId: product.id,
+    const cartProduct: CartProduct = {
+      id: product.id,
       name: product.name,
       price,
-      maxStock: stock,
-      image: product.image || undefined,
-    });
+      sellingPrice: price,
+      barcode: '',
+      stockQuantity: stock,
+      unit: product.unit || 'cái',
+    };
+    addItem(cartProduct);
   };
 
   return (
@@ -131,7 +135,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   outOfStockOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',

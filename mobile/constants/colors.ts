@@ -18,4 +18,6 @@ export const Colors = {
   infoLight: '#E0F2FE',
   card: '#FFFFFF',
   shadow: '#0F172A',
+  categoryColors: ['#FEF3C7', '#DCFCE7', '#DBEAFE', '#FCE7F3'],
+  categoryIconColors: ['#B45309', '#15803D', '#1D4ED8', '#BE185D'],
 };

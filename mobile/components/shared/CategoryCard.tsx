@@ -20,7 +20,7 @@ const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   'bánh kẹo': 'ice-cream-outline',
   'vệ sinh': 'sparkles-outline',
   'rau củ': 'nutrition-outline',
-  'trái cây': 'apple-outline',
+  'trái cây': 'nutrition-outline',
   'thịt': 'restaurant-outline',
   'hải sản': 'fish-outline',
   'sữa': 'beaker-outline',

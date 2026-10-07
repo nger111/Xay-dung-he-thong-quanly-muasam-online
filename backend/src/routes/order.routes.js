@@ -14,7 +14,9 @@ const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/orderController');
 const { authenticate } = require('../middlewares/auth.middleware');
-const { requireAdmin, requireAdminOrManager, requireAuth } = require('../middlewares/role.middleware');
+const { requireAdminOrManager, requireAuth, requireCustomer } = require('../middlewares/role.middleware');
+const { validate } = require('../middlewares/validate.middleware');
+const { createCustomerOrderSchema } = require('../validators/order.validator');
 
 /**
  * @swagger
@@ -27,7 +29,8 @@ const { requireAdmin, requireAdminOrManager, requireAuth } = require('../middlew
  *     tags: [Orders]
  */
 router.get('/', authenticate, requireAdminOrManager, orderController.getAllOrders);
-router.post('/', authenticate, requireAuth, orderController.createOrder);
+router.get('/my', authenticate, requireAuth, orderController.getMyOrders);
+router.post('/', authenticate, requireAuth, validate(createCustomerOrderSchema), orderController.createOrder);
 
 /**
  * @swagger
@@ -46,5 +49,6 @@ router.get('/:id', authenticate, requireAuth, orderController.getOrderById);
  *     tags: [Orders]
  */
 router.patch('/:id/cancel', authenticate, requireAdminOrManager, orderController.cancelOrder);
+router.patch('/:id/status', authenticate, requireAdminOrManager, orderController.updateOrderStatus);
 
 module.exports = router;

@@ -30,6 +30,15 @@ router.get('/out-of-stock', authenticate, requireStaff, inventoryController.getO
 
 /**
  * @swagger
+ * /inventory/batches:
+ *   get:
+ *     summary: Danh sách chi tiết tất cả các lô hàng theo bảng inventory_batches
+ *     tags: [Inventory]
+ */
+router.get('/batches', authenticate, requireStaff, inventoryController.getAllBatches);
+
+/**
+ * @swagger
  * /inventory/{productId}:
  *   get:
  *     summary: Chi tiết tồn kho 1 sản phẩm kèm các lô hàng theo FEFO

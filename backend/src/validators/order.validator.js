@@ -30,4 +30,19 @@ const createOrderSchema = Joi.object({
   note: Joi.string().optional().allow('', null),
 });
 
-module.exports = { createOrderSchema };
+const createCustomerOrderSchema = Joi.object({
+  items: Joi.array()
+    .items(
+      Joi.object({
+        product_id: Joi.number().integer().positive().required(),
+        quantity: Joi.number().integer().min(1).required(),
+      })
+    )
+    .min(1)
+    .required(),
+  payment_method: Joi.string().valid('TIEN_MAT').default('TIEN_MAT'),
+  cash_received: Joi.number().min(0).default(0),
+  note: Joi.string().max(2000).required(),
+});
+
+module.exports = { createOrderSchema, createCustomerOrderSchema };

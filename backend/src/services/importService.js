@@ -59,9 +59,11 @@ const getImportById = async (id) => {
 
   const [details] = await pool.query(`
     SELECT ird.*, p.name AS product_name, p.barcode, p.unit,
+           COALESCE(ib.batch_code, CONCAT('LO-', p.product_code, '-', LPAD(ib.id, 4, '0'))) AS batch_code,
            sp.label AS shelf_label, sh.name AS shelf_name
     FROM import_receipt_details ird
     JOIN products p ON ird.product_id = p.id
+    LEFT JOIN inventory_batches ib ON ird.batch_id = ib.id
     LEFT JOIN shelf_positions sp ON ird.shelf_position_id = sp.id
     LEFT JOIN shelves sh ON sp.shelf_id = sh.id
     WHERE ird.receipt_id = ?`, [id]);

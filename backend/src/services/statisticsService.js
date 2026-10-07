@@ -60,12 +60,12 @@ const getRevenue = async ({ from_date, to_date, type = 'daily' }) => {
 
   // Mặc định daily
   const [rows] = await pool.query(`
-    SELECT DATE(created_at) AS date,
+    SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS date,
            COUNT(*) AS order_count,
            COALESCE(SUM(total_amount), 0) AS revenue
     FROM sales_orders
     WHERE status = 'COMPLETED' ${dateFilter}
-    GROUP BY DATE(created_at)
+    GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
     ORDER BY date ASC`, params);
   return rows;
 };
@@ -81,13 +81,15 @@ const getTopProducts = async (fromDate, toDate, limit = 10) => {
 
   const [rows] = await pool.query(`
     SELECT p.id, p.name, p.barcode, p.unit, p.selling_price,
+           COALESCE(c.name, 'Chưa phân loại') AS category_name,
            SUM(sod.quantity) AS total_sold,
            SUM(sod.subtotal) AS total_revenue
     FROM sales_order_details sod
     JOIN products p ON sod.product_id = p.id
+    LEFT JOIN categories c ON p.category_id = c.id
     JOIN sales_orders so ON sod.order_id = so.id
     WHERE so.status = 'COMPLETED' ${dateFilter}
-    GROUP BY p.id
+    GROUP BY p.id, c.name
     ORDER BY total_sold DESC
     LIMIT ?`,
     [...params, parseInt(limit)]);
@@ -139,7 +141,9 @@ const getProfitReport = async (fromDate, toDate) => {
     SELECT
       COALESCE(SUM(sod.subtotal), 0) AS total_revenue,
       COALESCE(SUM(sod.quantity * p.import_price), 0) AS total_cogs,
-      COALESCE(SUM(sod.subtotal - (sod.quantity * p.import_price)), 0) AS gross_profit
+      COALESCE(SUM(sod.subtotal - (sod.quantity * p.import_price)), 0) AS gross_profit,
+      COUNT(DISTINCT so.id) AS total_orders,
+      COALESCE(SUM(sod.quantity), 0) AS total_items_sold
     FROM sales_order_details sod
     JOIN products p ON sod.product_id = p.id
     JOIN sales_orders so ON sod.order_id = so.id
@@ -153,6 +157,8 @@ const getProfitReport = async (fromDate, toDate) => {
     total_revenue: metrics.total_revenue,
     total_cogs: metrics.total_cogs,
     gross_profit: metrics.gross_profit,
+    total_orders: metrics.total_orders,
+    total_items_sold: metrics.total_items_sold,
     profit_margin_percent: parseFloat(profitMargin),
   };
 };

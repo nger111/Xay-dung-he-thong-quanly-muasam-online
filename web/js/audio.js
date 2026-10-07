@@ -17,6 +17,10 @@ class SoundEffects {
 
   /** Âm thanh Beep khi quét mã vạch thành công */
   playScanBeep() {
+    this.playBeep();
+  }
+
+  playBeep() {
     try {
       this.init();
       if (!this.ctx) return;

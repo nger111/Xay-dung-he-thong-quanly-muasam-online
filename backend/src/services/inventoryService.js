@@ -99,4 +99,88 @@ const adjustInventory = async (productId, adjustment, reason, userId) => {
   return { product_id: productId, old_quantity: pRows[0].stock_quantity, adjustment, new_quantity: newQty, reason };
 };
 
-module.exports = { getAllInventory, getProductInventory, getLowStockProducts, getOutOfStockProducts, adjustInventory };
+/** Danh sách tất cả lô hàng (inventory_batches) với đầy đủ liên kết sản phẩm, nhà cung cấp, kệ hàng */
+const getAllBatches = async ({ search = '', status = 'ALL', product_id, supplier_id } = {}) => {
+  const params = [];
+  let where = 'WHERE 1=1';
+
+  if (search) {
+    where += ` AND (
+      ib.batch_code LIKE ? OR 
+      p.name LIKE ? OR 
+      p.barcode LIKE ? OR 
+      p.product_code LIKE ? OR 
+      s.name LIKE ?
+    )`;
+    const s = `%${search}%`;
+    params.push(s, s, s, s, s);
+  }
+
+  if (product_id) {
+    where += ' AND ib.product_id = ?';
+    params.push(parseInt(product_id));
+  }
+
+  if (supplier_id) {
+    where += ' AND ib.supplier_id = ?';
+    params.push(parseInt(supplier_id));
+  }
+
+  if (status === 'ACTIVE') {
+    where += " AND ib.status = 'ACTIVE' AND (ib.expiry_date IS NULL OR ib.expiry_date >= CURDATE())";
+  } else if (status === 'DEPLETED') {
+    where += " AND (ib.status = 'DEPLETED' OR ib.quantity <= 0)";
+  } else if (status === 'EXPIRED') {
+    where += " AND (ib.status = 'EXPIRED' OR (ib.expiry_date IS NOT NULL AND ib.expiry_date < CURDATE()))";
+  } else if (status === 'NEAR_EXPIRY') {
+    where += " AND ib.status = 'ACTIVE' AND ib.expiry_date IS NOT NULL AND DATEDIFF(ib.expiry_date, CURDATE()) <= 30 AND ib.expiry_date >= CURDATE()";
+  }
+
+  const sql = `
+    SELECT 
+      ib.id,
+      ib.product_id,
+      ib.supplier_id,
+      ib.shelf_position_id,
+      COALESCE(ib.batch_code, CONCAT('LO-', p.product_code, '-', LPAD(ib.id, 4, '0'))) AS batch_code,
+      ib.quantity,
+      ib.original_quantity,
+      ib.import_price,
+      DATE_FORMAT(ib.import_date, '%Y-%m-%d') AS import_date,
+      DATE_FORMAT(ib.expiry_date, '%Y-%m-%d') AS expiry_date,
+      ib.status,
+      ib.created_at,
+      ib.updated_at,
+      p.name AS product_name,
+      p.product_code,
+      p.barcode,
+      p.unit,
+      p.selling_price,
+      c.name AS category_name,
+      s.name AS supplier_name,
+      s.phone AS supplier_phone,
+      sh.name AS shelf_name,
+      sp.floor_number,
+      sp.position_number,
+      sp.label AS shelf_label,
+      DATEDIFF(ib.expiry_date, CURDATE()) AS days_remaining,
+      CASE
+        WHEN ib.status = 'DEPLETED' OR ib.quantity <= 0 THEN 'DEPLETED'
+        WHEN ib.expiry_date IS NOT NULL AND ib.expiry_date < CURDATE() THEN 'EXPIRED'
+        WHEN ib.expiry_date IS NOT NULL AND DATEDIFF(ib.expiry_date, CURDATE()) <= 30 THEN 'NEAR_EXPIRY'
+        ELSE 'ACTIVE'
+      END AS fefo_status
+    FROM inventory_batches ib
+    JOIN products p ON ib.product_id = p.id
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN suppliers s ON ib.supplier_id = s.id
+    LEFT JOIN shelf_positions sp ON ib.shelf_position_id = sp.id
+    LEFT JOIN shelves sh ON sp.shelf_id = sh.id
+    ${where}
+    ORDER BY ib.expiry_date ASC, ib.id DESC`;
+
+  const [rows] = await pool.query(sql, params);
+  return rows;
+};
+
+module.exports = { getAllInventory, getProductInventory, getLowStockProducts, getOutOfStockProducts, adjustInventory, getAllBatches };

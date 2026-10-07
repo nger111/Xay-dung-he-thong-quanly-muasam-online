@@ -21,6 +21,33 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen
+        name="pos"
+        options={{
+          title: 'Bán hàng',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="barcode-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="imports"
+        options={{
+          title: 'Nhập hàng',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="cube-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="orders"
+        options={{
+          title: 'Đơn hàng',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="receipt-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
           title: 'Tổng quan',
@@ -30,44 +57,24 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="products"
+        name="account"
         options={{
-          title: 'Sản phẩm',
+          title: 'Tài khoản',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cube-outline" size={size} color={color} />
+            <Ionicons name="person-outline" size={size} color={color} />
           ),
         }}
       />
-      <Tabs.Screen
-        name="pos"
-        options={{
-          title: 'Bán hàng',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cart-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="inventory"
-        options={{
-          title: 'Kho hàng',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="archive-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="statistics"
-        options={{
-          title: 'Báo cáo',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bar-chart-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      {/* Hidden screens from tab bar */}
+      <Tabs.Screen name="catalog" options={{ href: null, title: 'Cửa hàng' }} />
+      <Tabs.Screen name="cart" options={{ href: null, title: 'Giỏ hàng' }} />
+      <Tabs.Screen name="checkout" options={{ href: null, title: 'Xác nhận đơn' }} />
+      <Tabs.Screen name="product/[id]" options={{ href: null, title: 'Chi tiết sản phẩm' }} />
+      <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Chi tiết đơn hàng' }} />
       <Tabs.Screen name="category" options={{ href: null }} />
-      <Tabs.Screen name="imports" options={{ href: null }} />
+      <Tabs.Screen name="scan" options={{ href: null }} />
+      <Tabs.Screen name="products" options={{ href: null }} />
+      <Tabs.Screen name="inventory" options={{ href: null }} />
+      <Tabs.Screen name="statistics" options={{ href: null }} />
     </Tabs>
   );
 }

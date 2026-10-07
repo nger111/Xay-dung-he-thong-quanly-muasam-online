@@ -1,13 +1,14 @@
 import { useCartStore } from '../store/cartStore';
 
 export function useCart() {
-  const { items, totalAmount, totalItems, addItem, removeItem, updateQuantity, clearCart } =
-    useCartStore();
+  const { items, totalAmount, addItem, removeItem, updateQuantity, clearCart } = useCartStore();
+  const totalItems = items.reduce((total, item) => total + item.quantity, 0);
 
-  const isInCart = (productId: string) => items.some((i) => i.productId === productId);
+  const isInCart = (productId: string) =>
+    items.some((item) => item.product.id === productId);
 
   const getQuantity = (productId: string) =>
-    items.find((i) => i.productId === productId)?.quantity ?? 0;
+    items.find((item) => item.product.id === productId)?.quantity ?? 0;
 
   const formatPrice = (price: number) =>
     price.toLocaleString('vi-VN') + 'đ';

@@ -1,13 +1,17 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import type { Product } from '../services/api';
+export type { Product } from '../services/api';
 
 export interface CartProduct {
   id: string;
   name: string;
   price: number;
+  sellingPrice: number;
   barcode: string;
   stockQuantity: number;
   unit?: string;
-  sellingPrice?: number;
 }
 
 export interface CartItem {
@@ -18,56 +22,70 @@ export interface CartItem {
 interface CartState {
   items: CartItem[];
   totalAmount: number;
-  addItem: (product: CartProduct) => void;
+  addItem: (product: Product | CartProduct) => boolean;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
 }
 
-const calcTotal = (items: CartItem[]) =>
-  items.reduce((sum, item) => {
-    if (!item?.product) return sum;
-    const price = item.product.sellingPrice ?? item.product.price ?? 0;
-    return sum + price * (item.quantity || 0);
-  }, 0);
+export const useCartStore = create<CartState>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      totalAmount: 0,
 
-export const useCartStore = create<CartState>((set, get) => ({
-  items: [],
-  totalAmount: 0,
+      addItem: (product) => {
+        if (product.stockQuantity <= 0) return false;
+        const current = get().items.find((item) => item.product.id === product.id);
+        if (current) {
+          if (current.quantity >= product.stockQuantity) return false;
+          const items = get().items.map((item) =>
+            item.product.id === product.id
+              ? { product, quantity: item.quantity + 1 }
+              : item
+          );
+          const availableItems = items.filter((item) => item.quantity > 0);
+          set({ items: availableItems, totalAmount: getCartTotal(availableItems) });
+        } else {
+          const items = [...get().items, { product, quantity: 1 }];
+          set({ items, totalAmount: getCartTotal(items) });
+        }
+        return true;
+      },
 
-  addItem: (product: CartProduct) => {
-    if (!product || !product.id || !product.name) return;
-    const items = get().items.filter((i) => i?.product?.id && i?.product?.name);
-    const existingIndex = items.findIndex((i) => i.product.id === product.id);
-    let newItems: CartItem[];
-    if (existingIndex >= 0) {
-      const existing = items[existingIndex];
-      const maxStock = product.stockQuantity ?? 999;
-      if (existing.quantity >= maxStock) return;
-      newItems = items.map((item, idx) =>
-        idx === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
-      );
-    } else {
-      newItems = [...items, { product, quantity: 1 }];
+      removeItem: (productId) => {
+        const items = get().items.filter((item) => item.product.id !== productId);
+        set({ items, totalAmount: getCartTotal(items) });
+      },
+
+      updateQuantity: (productId, quantity) => {
+        if (quantity <= 0) {
+          get().removeItem(productId);
+          return;
+        }
+        const items = get().items.map((item) => {
+          if (item.product.id !== productId) return item;
+          return {
+            ...item,
+            quantity: Math.min(quantity, item.product.stockQuantity),
+          };
+        });
+        const availableItems = items.filter((item) => item.quantity > 0);
+        set({ items: availableItems, totalAmount: getCartTotal(availableItems) });
+      },
+
+      clearCart: () => set({ items: [], totalAmount: 0 }),
+    }),
+    {
+      name: 'customer-cart',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ items: state.items, totalAmount: state.totalAmount }),
     }
-    set({ items: newItems, totalAmount: calcTotal(newItems) });
-  },
+  )
+);
 
-  removeItem: (productId: string) => {
-    const newItems = get().items.filter((i) => i?.product?.id && i.product.id !== productId);
-    set({ items: newItems, totalAmount: calcTotal(newItems) });
-  },
-
-  updateQuantity: (productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      get().removeItem(productId);
-      return;
-    }
-    const newItems = get().items
-      .filter((i) => i?.product?.id)
-      .map((item) => (item.product.id === productId ? { ...item, quantity } : item));
-    set({ items: newItems, totalAmount: calcTotal(newItems) });
-  },
-
-  clearCart: () => set({ items: [], totalAmount: 0 }),
-}));
+export const getCartTotal = (items: CartItem[]) =>
+  items.reduce(
+    (total, item) => total + item.product.sellingPrice * item.quantity,
+    0
+  );

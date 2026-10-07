@@ -39,11 +39,13 @@ const getAllOrders = async ({ from_date, to_date, user_id, status, page = 1, lim
 };
 
 /** Chi tiết hoá đơn */
-const getOrderById = async (id) => {
+const getOrderById = async (id, customerId) => {
+  const ownerClause = customerId === undefined ? '' : ' AND so.user_id = ?';
+  const params = customerId === undefined ? [id] : [id, customerId];
   const [orderRows] = await pool.query(`
     SELECT so.*, u.full_name AS cashier_name
     FROM sales_orders so LEFT JOIN users u ON so.user_id = u.id
-    WHERE so.id = ?`, [id]);
+    WHERE so.id = ?${ownerClause}`, params);
 
   if (!orderRows[0]) {
     throw createError(MESSAGES.ORDER_NOT_FOUND, 404, 'ORDER_NOT_FOUND');
@@ -216,11 +218,11 @@ const createPosOrder = async (orderData, userId) => {
     // ── 3. Tạo mã hoá đơn ──
     const order_code = await generateOrderCode(conn);
 
-    // ── 4. Lưu hoá đơn (sales_orders) ──
+    // ── 4. Lưu hoá đơn (sales_orders) với trạng thái PENDING (Chờ xác nhận) ──
     const [insertResult] = await conn.query(`
       INSERT INTO sales_orders (order_code, user_id, total_amount, cash_received, change_amount, payment_method, status, note)
-      VALUES (?, ?, ?, ?, ?, ?, 'COMPLETED', ?)`,
-      [order_code, userId, total_amount, received, change_amount, payment_method, note || null]
+      VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)`,
+      [order_code, userId, total_amount, received, change_amount, paymentMethod, note || null]
     );
     const orderId = insertResult.insertId;
 
@@ -236,11 +238,11 @@ const createPosOrder = async (orderData, userId) => {
       await deductStockFEFO(conn, item.product_id, item.quantity);
     }
 
-    // ── 6. Lưu bản ghi thanh toán ──
+    // ── 6. Lưu bản ghi thanh toán với trạng thái PENDING ──
     await conn.query(`
       INSERT INTO payments (order_id, amount, method, status)
-      VALUES (?, ?, ?, 'COMPLETED')`,
-      [orderId, total_amount, payment_method]
+      VALUES (?, ?, ?, 'PENDING')`,
+      [orderId, total_amount, paymentMethod]
     );
 
     await conn.commit();
@@ -259,8 +261,16 @@ const createPosOrder = async (orderData, userId) => {
  * Tương tự POS nhưng xử lý trạng thái linh hoạt
  */
 const createOrder = async (orderData, userId) => {
-  // Mobile customer order cũng dùng logic trừ tồn FEFO tương tự POS
-  return createPosOrder(orderData, userId);
+  const items = orderData.items.map(({ product_id, productId, quantity }) => ({
+    product_id: product_id || productId,
+    quantity,
+  }));
+  return createPosOrder({
+    items,
+    payment_method: orderData.payment_method || 'TIEN_MAT',
+    cash_received: orderData.cash_received || 0,
+    note: orderData.note,
+  }, userId);
 };
 
 /** Huỷ hoá đơn — Hoàn lại tồn kho */
@@ -293,6 +303,49 @@ const cancelOrder = async (id) => {
   }
 };
 
+/** Cập nhật trạng thái đơn hàng (PENDING, COMPLETED, CANCELLED) */
+const updateOrderStatus = async (id, status) => {
+  const validStatuses = ['PENDING', 'COMPLETED', 'CANCELLED'];
+  if (!validStatuses.includes(status)) {
+    throw createError(`Trạng thái không hợp lệ. Cho phép: ${validStatuses.join(', ')}`, 400, 'INVALID_STATUS');
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[order]] = await conn.query('SELECT * FROM sales_orders WHERE id = ? FOR UPDATE', [id]);
+    if (!order) throw createError(MESSAGES.ORDER_NOT_FOUND, 404, 'ORDER_NOT_FOUND');
+
+    // Nếu đơn từ trạng thái khác chuyển sang CANCELLED thì hoàn tồn kho
+    if (status === 'CANCELLED' && order.status !== 'CANCELLED') {
+      const [details] = await conn.query('SELECT * FROM sales_order_details WHERE order_id = ?', [id]);
+      for (const item of details) {
+        await conn.query('UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?', [item.quantity, item.product_id]);
+      }
+      await conn.query("UPDATE payments SET status = 'REFUNDED' WHERE order_id = ?", [id]);
+    }
+    // Nếu chuyển sang COMPLETED thì cập nhật thanh toán thành COMPLETED
+    else if (status === 'COMPLETED') {
+      await conn.query("UPDATE payments SET status = 'COMPLETED' WHERE order_id = ?", [id]);
+    }
+    // Nếu chuyển sang PENDING thì cập nhật thanh toán thành PENDING
+    else if (status === 'PENDING') {
+      await conn.query("UPDATE payments SET status = 'PENDING' WHERE order_id = ?", [id]);
+    }
+
+    await conn.query('UPDATE sales_orders SET status = ? WHERE id = ?', [status, id]);
+    await conn.commit();
+
+    return getOrderById(id);
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+};
+
 module.exports = {
   getAllOrders,
   getOrderById,
@@ -300,4 +353,5 @@ module.exports = {
   createPosOrder,
   createOrder,
   cancelOrder,
+  updateOrderStatus,
 };
