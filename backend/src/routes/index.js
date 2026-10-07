@@ -85,6 +85,7 @@ router.use('/suppliers', supplierRoutes);
 // Kho
 router.use('/inventory', inventoryRoutes);
 router.use('/purchase-orders', importRoutes);
+router.use('/imports', importRoutes); // Tương thích alias cho Mobile App
 
 // Bán hàng
 router.use('/pos', posRoutes);
@@ -92,6 +93,7 @@ router.use('/orders', orderRoutes);
 
 // Báo cáo
 router.use('/reports', statisticsRoutes);
+router.use('/statistics', statisticsRoutes); // Tương thích alias cho Mobile App
 
 // Kệ hàng
 router.use('/shelves', shelfRoutes);

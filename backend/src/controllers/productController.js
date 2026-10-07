@@ -17,6 +17,16 @@ const getAllProducts = async (req, res) => {
   });
 };
 
+/** GET /api/v1/products/search — Tìm kiếm nhanh sản phẩm (Mobile + Web POS) */
+const searchProducts = async (req, res) => {
+  const keyword = req.query.q || req.query.keyword || req.query.search || '';
+  const products = await productService.searchProducts(keyword);
+  success(res, {
+    message: 'Tìm kiếm sản phẩm thành công',
+    data: { products, total: products.length },
+  });
+};
+
 /** GET /api/v1/products/:id — Chi tiết sản phẩm */
 const getProductById = async (req, res) => {
   const product = await productService.getProductById(parseInt(req.params.id));
@@ -55,6 +65,7 @@ const deleteProduct = async (req, res) => {
 
 module.exports = {
   getAllProducts,
+  searchProducts,
   getProductById,
   getProductByBarcode,
   getProductBySku,

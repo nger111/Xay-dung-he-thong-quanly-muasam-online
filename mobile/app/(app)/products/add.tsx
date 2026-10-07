@@ -37,12 +37,13 @@ export default function AddProductScreen() {
     setLoading(true);
     try {
       await productsAPI.create({
-        code: form.code.trim(),
+        sku: form.code.trim(),
+        product_code: form.code.trim(),
         barcode: form.barcode.trim(),
         name: form.name.trim(),
-        importPrice: parseFloat(form.importPrice),
-        exportPrice: parseFloat(form.exportPrice),
-        minStock: parseInt(form.minStock) || 0,
+        import_price: parseFloat(form.importPrice) || 0,
+        selling_price: parseFloat(form.exportPrice) || 0,
+        min_stock_level: parseInt(form.minStock) || 5,
       });
       Alert.alert('✅ Thành công', 'Sản phẩm đã được thêm', [
         { text: 'OK', onPress: () => router.back() },

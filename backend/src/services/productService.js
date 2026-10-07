@@ -140,8 +140,16 @@ const searchProducts = async (keyword) => {
 
 /** Thêm sản phẩm mới */
 const createProduct = async (data) => {
-  const productCode = data.sku || data.product_code || `SP${Date.now().toString().slice(-6)}`;
-  const importPrice = data.cost_price || data.import_price || 0;
+  const productCode = data.sku || data.product_code || data.code || `SP${Date.now().toString().slice(-6)}`;
+  const importPrice = data.cost_price !== undefined
+    ? data.cost_price
+    : (data.import_price !== undefined ? data.import_price : (data.importPrice !== undefined ? data.importPrice : 0));
+  const sellingPrice = data.selling_price !== undefined
+    ? data.selling_price
+    : (data.exportPrice !== undefined ? data.exportPrice : (data.price !== undefined ? data.price : 0));
+  const minStock = data.min_stock_level !== undefined
+    ? data.min_stock_level
+    : (data.minStock !== undefined ? data.minStock : 5);
 
   // Kiểm tra barcode trùng
   const [existBarcode] = await pool.query('SELECT id FROM products WHERE barcode = ?', [data.barcode]);
@@ -160,7 +168,7 @@ const createProduct = async (data) => {
       import_price, selling_price, stock_quantity, min_stock_level, shelf_position_id, description, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
     [productCode, data.barcode, data.name, data.category_id || null, data.supplier_id || null,
-     data.unit || 'cái', importPrice, data.selling_price, data.min_stock_level || 5,
+     data.unit || 'cái', importPrice, sellingPrice, minStock,
      data.shelf_position_id || null, data.description || null, data.status || 'ACTIVE']);
 
   return getProductById(result.insertId);

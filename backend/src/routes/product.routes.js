@@ -17,7 +17,16 @@ const { requireAdmin, requireAdminOrManager, requireAuth } = require('../middlew
 const { validate } = require('../middlewares/validate.middleware');
 const { createProductSchema, updateProductSchema } = require('../validators/product.validator');
 
-// ── Tìm theo barcode/sku (đặt TRƯỚC /:id để không bị conflict) ──
+// ── Các routes tìm kiếm cụ thể (đặt TRƯỚC /:id để tránh bị match nhầm) ──
+
+/**
+ * @swagger
+ * /products/search:
+ *   get:
+ *     summary: Tìm kiếm nhanh sản phẩm theo từ khóa (tên, mã vạch, SKU)
+ *     tags: [Products]
+ */
+router.get('/search', authenticate, requireAuth, productController.searchProducts);
 
 /**
  * @swagger

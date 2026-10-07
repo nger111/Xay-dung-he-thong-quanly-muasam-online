@@ -142,7 +142,10 @@ const deductStockFEFO = async (conn, productId, quantityNeeded) => {
  * @param {number} userId - ID thu ngân / nhân viên bán
  */
 const createPosOrder = async (orderData, userId) => {
-  const { items, cash_received = 0, payment_method = 'TIEN_MAT', note } = orderData;
+  const items = orderData.items;
+  const cashReceivedInput = orderData.cash_received !== undefined ? orderData.cash_received : (orderData.cashReceived !== undefined ? orderData.cashReceived : 0);
+  const paymentMethod = orderData.payment_method || orderData.paymentMethod || 'TIEN_MAT';
+  const note = orderData.note;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     throw createError('Đơn hàng phải có ít nhất 1 sản phẩm.', 400, 'EMPTY_ORDER');
@@ -158,44 +161,49 @@ const createPosOrder = async (orderData, userId) => {
     let total_amount = 0;
 
     for (const item of items) {
-      if (!item.product_id || !item.quantity || item.quantity <= 0) {
+      const productId = item.product_id || item.productId;
+      const quantity = parseInt(item.quantity);
+
+      if (!productId || !quantity || quantity <= 0) {
         throw createError('Dữ liệu sản phẩm trong giỏ hàng không hợp lệ.', 400, 'INVALID_ITEM');
       }
 
       const [[product]] = await conn.query(
         'SELECT id, name, barcode, selling_price, stock_quantity FROM products WHERE id = ? AND status = "ACTIVE" FOR UPDATE',
-        [item.product_id]
+        [productId]
       );
 
       if (!product) {
-        throw createError(`Sản phẩm ID ${item.product_id} không tồn tại hoặc đã ngừng kinh doanh.`, 404, 'PRODUCT_NOT_FOUND');
+        throw createError(`Sản phẩm ID ${productId} không tồn tại hoặc đã ngừng kinh doanh.`, 404, 'PRODUCT_NOT_FOUND');
       }
 
-      if (product.stock_quantity < item.quantity) {
+      if (product.stock_quantity < quantity) {
         throw createError(
-          `"${product.name}" không đủ số lượng trong kho. Hiện có: ${product.stock_quantity}, cần: ${item.quantity}.`,
+          `"${product.name}" không đủ số lượng trong kho. Hiện có: ${product.stock_quantity}, cần: ${quantity}.`,
           400,
           'INSUFFICIENT_STOCK'
         );
       }
 
-      const unit_price = item.unit_price !== undefined ? parseFloat(item.unit_price) : parseFloat(product.selling_price);
-      const subtotal = unit_price * item.quantity;
+      const unitPrice = item.unit_price !== undefined
+        ? parseFloat(item.unit_price)
+        : (item.price !== undefined ? parseFloat(item.price) : parseFloat(product.selling_price));
+      const subtotal = unitPrice * quantity;
       total_amount += subtotal;
 
       productSnapshots.push({
         product_id: product.id,
         product_name: product.name,
         barcode: product.barcode,
-        unit_price,
-        quantity: item.quantity,
+        unit_price: unitPrice,
+        quantity,
         subtotal,
       });
     }
 
     // ── 2. Kiểm tra tiền khách đưa nếu thanh toán tiền mặt ──
-    const received = parseFloat(cash_received);
-    if (payment_method === 'TIEN_MAT' && received < total_amount) {
+    const received = parseFloat(cashReceivedInput || 0);
+    if (paymentMethod === 'TIEN_MAT' && received > 0 && received < total_amount) {
       throw createError(
         `Số tiền khách đưa (${received.toLocaleString()}đ) không đủ so với tổng hoá đơn (${total_amount.toLocaleString()}đ).`,
         400,

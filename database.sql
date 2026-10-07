@@ -24,8 +24,8 @@ CREATE TABLE users (
     full_name     VARCHAR(100) NOT NULL                COMMENT 'Họ và tên',
     phone         VARCHAR(20)                          COMMENT 'Số điện thoại',
     email         VARCHAR(100) UNIQUE                  COMMENT 'Email',
-    role          ENUM('CHU_QUAN', 'NHAN_VIEN')
-                  NOT NULL DEFAULT 'NHAN_VIEN'         COMMENT 'Phân quyền: Chủ quán hoặc Nhân viên',
+    role          ENUM('ADMIN', 'MANAGER', 'CASHIER', 'CUSTOMER', 'CHU_QUAN', 'NHAN_VIEN')
+                  NOT NULL DEFAULT 'CASHIER'           COMMENT 'Phân quyền: ADMIN, MANAGER, CASHIER, CUSTOMER',
     is_active     BOOLEAN      NOT NULL DEFAULT TRUE   COMMENT 'Tài khoản còn hoạt động?',
     created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -310,19 +310,35 @@ CREATE TABLE payments (
 INSERT INTO users (username, password_hash, full_name, phone, email, role) VALUES
 (
     'admin',
-    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', -- password: password (thay bằng hash thật)
-    'Chủ Quán',
+    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', -- password: password
+    'Quản Trị Viên (Admin)',
     '0901234567',
     'admin@taphoavinh.com',
-    'CHU_QUAN'
+    'ADMIN'
 ),
 (
-    'nhanvien1',
+    'manager1',
     '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
-    'Nguyễn Văn A',
+    'Quản Lý Cửa Hàng',
     '0901234568',
-    'nva@taphoavinh.com',
-    'NHAN_VIEN'
+    'manager@taphoavinh.com',
+    'MANAGER'
+),
+(
+    'cashier1',
+    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    'Thu Ngân 01',
+    '0901234569',
+    'cashier@taphoavinh.com',
+    'CASHIER'
+),
+(
+    'customer1',
+    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    'Khách Hàng Thân Thiết',
+    '0909999888',
+    'customer@taphoavinh.com',
+    'CUSTOMER'
 );
 
 -- Danh mục sản phẩm

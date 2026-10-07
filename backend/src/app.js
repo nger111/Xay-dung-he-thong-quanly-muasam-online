@@ -17,25 +17,32 @@ const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'API Quản lý Tạp Hoá',
+      title: 'Hệ Thống Quản Lý Kinh Doanh & Bán Lẻ Hàng Tiêu Dùng API',
       version: '1.0.0',
       description: `
-        ## Hệ thống API Quản lý & Bán hàng Tạp Hoá
+        ## REST API Hệ Thống Bán Lẻ Hàng Tiêu Dùng Đa Nền Tảng (Web & Mobile)
+        
+        **Kiến trúc:**
+        - Web Admin / Quản lý / Thu ngân POS & Khách hàng Mobile App (Expo)
+        - Xác thực JWT Bearer Token & Phân quyền RBAC (ADMIN, MANAGER, CASHIER, CUSTOMER)
+        - Quản lý tồn kho theo lô & hạn sử dụng (FEFO - First Expired, First Out)
+        - Hỗ trợ quét mã vạch sản phẩm & kiểm tra tồn kho tức thì
+        - Quản lý phiếu nhập hàng & thống kê doanh thu, lợi nhuận gộp
         
         **Hướng dẫn sử dụng:**
-        1. Đăng nhập tại \`POST /api/auth/login\` để lấy JWT token
-        2. Click nút **Authorize** (🔒) và nhập token theo dạng: \`Bearer <token>\`
-        3. Thực hiện các API khác
-        
-        **Tài khoản mặc định:**
-        - Chủ quán: \`admin\` / \`Admin@123\`
-        - Nhân viên: \`nhanvien1\` / \`Admin@123\`
+        1. Đăng nhập tại \`POST /api/v1/auth/login\` hoặc đăng ký \`POST /api/v1/auth/register\`
+        2. Bấm nút **Authorize** (🔒) góc phải và dán JWT token: \`<token>\` (hoặc Bearer <token>)
+        3. Kiểm tra các endpoints nghiệp vụ bên dưới.
       `,
     },
     servers: [
       {
+        url: `http://localhost:${process.env.PORT || 3000}/api/v1`,
+        description: 'V1 API Server (Khuyến nghị)',
+      },
+      {
         url: `http://localhost:${process.env.PORT || 3000}/api`,
-        description: 'Development Server',
+        description: 'Default API Server',
       },
     ],
     components: {
@@ -44,7 +51,7 @@ const swaggerOptions = {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Nhập JWT token (không cần thêm "Bearer")',
+          description: 'Nhập JWT token',
         },
       },
     },
@@ -57,24 +64,36 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 // ==================== MIDDLEWARES ====================
 
-app.use(cors()); // Cho phép tất cả origin (có thể giới hạn trong production)
+app.use(cors()); // Cho phép kết nối đa nền tảng từ Web & Mobile
 app.use(express.json()); // Parse JSON body
 app.use(express.urlencoded({ extended: true })); // Parse form data
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev')); // HTTP logging
 
-// Phục vụ ảnh sản phẩm đã upload
+// Phục vụ ảnh sản phẩm tĩnh
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
+// Phục vụ giao diện Web POS & Quản Trị Hệ Thống Bán Lẻ
+app.use('/pos', express.static(path.join(__dirname, '..', '..', 'web')));
+app.use('/web', express.static(path.join(__dirname, '..', '..', 'web')));
+
 // ==================== ROUTES ====================
+// Hỗ trợ cả /api/v1 và /api
+app.use('/api/v1', routes);
 app.use('/api', routes);
+
+// Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Health check
+// Health check endpoint
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'API Quản lý Tạp Hoá đang hoạt động!',
-    docs: `http://localhost:${process.env.PORT || 3000}/api-docs`,
+    message: 'Hệ thống Quản lý Bán lẻ Hàng Tiêu dùng API đang hoạt động!',
+    version: '1.0.0',
+    endpoints: {
+      v1: `http://localhost:${process.env.PORT || 3000}/api/v1`,
+      docs: `http://localhost:${process.env.PORT || 3000}/api-docs`,
+    },
   });
 });
 
@@ -82,11 +101,12 @@ app.get('/', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: `Không tìm thấy: ${req.method} ${req.originalUrl}`,
+    message: `Không tìm thấy tài nguyên: ${req.method} ${req.originalUrl}`,
+    error: 'ROUTE_NOT_FOUND',
   });
 });
 
-// ==================== ERROR HANDLER (phải đặt cuối cùng) ====================
+// ==================== ERROR HANDLER ====================
 app.use(errorMiddleware);
 
 module.exports = app;

@@ -7,6 +7,7 @@ const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
   console.log('🚀 Server đang chạy!');
   console.log(`   URL:      http://localhost:${PORT}`);
+  console.log(`   Web POS:  http://localhost:${PORT}/pos`);
   console.log(`   API Docs: http://localhost:${PORT}/api-docs`);
   console.log(`   Môi trường: ${process.env.NODE_ENV || 'development'}`);
 });

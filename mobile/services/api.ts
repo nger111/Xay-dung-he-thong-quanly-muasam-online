@@ -25,7 +25,7 @@ api.interceptors.request.use(
   async (config) => {
     const token = await SecureStore.getItemAsync(TOKEN_KEY);
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      (config.headers as any).Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -44,12 +44,13 @@ export const productsAPI = {
   search: (q: string) => api.get('/products/search', { params: { q } }),
   getByBarcode: (barcode: string) => api.get(`/products/barcode/${barcode}`),
   create: (data: {
-    code: string;
+    sku: string;
+    product_code: string;
     barcode: string;
     name: string;
-    importPrice: number;
-    exportPrice: number;
-    minStock: number;
+    import_price: number;
+    selling_price: number;
+    min_stock_level: number;
   }) => api.post('/products', data),
 };
 
